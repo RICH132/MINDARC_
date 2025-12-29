@@ -7,6 +7,7 @@ import androidx.room.Room
 import com.example.mindarc.data.dao.ActivityRecordDao
 import com.example.mindarc.data.dao.QuizQuestionDao
 import com.example.mindarc.data.dao.ReadingContentDao
+import com.example.mindarc.data.dao.ReadingReflectionDao
 import com.example.mindarc.data.dao.RestrictedAppDao
 import com.example.mindarc.data.dao.UnlockSessionDao
 import com.example.mindarc.data.dao.UserProgressDao
@@ -15,6 +16,7 @@ import com.example.mindarc.data.model.ActivityRecord
 import com.example.mindarc.data.model.ActivityType
 import com.example.mindarc.data.model.QuizQuestion
 import com.example.mindarc.data.model.ReadingContent
+import com.example.mindarc.data.model.ReadingReflection
 import com.example.mindarc.data.model.RestrictedApp
 import com.example.mindarc.data.model.UnlockSession
 import com.example.mindarc.data.model.UserProgress
@@ -23,11 +25,11 @@ import kotlinx.coroutines.flow.first
 import java.util.Calendar
 
 class MindArcRepository(context: Context) {
-    private val database = Room.databaseBuilder(
+    private val database: MindArcDatabase = Room.databaseBuilder(
         context,
         MindArcDatabase::class.java,
         "mindarc_database"
-    ).build()
+    ).fallbackToDestructiveMigration().build()
 
     private val restrictedAppDao: RestrictedAppDao = database.restrictedAppDao()
     private val activityRecordDao: ActivityRecordDao = database.activityRecordDao()
@@ -35,6 +37,7 @@ class MindArcRepository(context: Context) {
     private val userProgressDao: UserProgressDao = database.userProgressDao()
     private val readingContentDao: ReadingContentDao = database.readingContentDao()
     private val quizQuestionDao: QuizQuestionDao = database.quizQuestionDao()
+    private val readingReflectionDao: ReadingReflectionDao = database.readingReflectionDao()
     private val packageManager: PackageManager = context.packageManager
 
     // Restricted Apps
@@ -83,6 +86,11 @@ class MindArcRepository(context: Context) {
     suspend fun calculateReadingPoints(minutes: Int): Int {
         // 1 minute of reading = 2 points
         return minutes * 2
+    }
+
+    // Reading Reflections
+    suspend fun insertReflection(reflection: ReadingReflection) {
+        readingReflectionDao.insertReflection(reflection)
     }
 
     // Unlock Sessions

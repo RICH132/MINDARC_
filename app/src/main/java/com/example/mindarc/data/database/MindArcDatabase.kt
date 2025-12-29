@@ -6,12 +6,14 @@ import androidx.room.TypeConverters
 import com.example.mindarc.data.dao.ActivityRecordDao
 import com.example.mindarc.data.dao.QuizQuestionDao
 import com.example.mindarc.data.dao.ReadingContentDao
+import com.example.mindarc.data.dao.ReadingReflectionDao
 import com.example.mindarc.data.dao.RestrictedAppDao
 import com.example.mindarc.data.dao.UnlockSessionDao
 import com.example.mindarc.data.dao.UserProgressDao
 import com.example.mindarc.data.model.ActivityRecord
 import com.example.mindarc.data.model.QuizQuestion
 import com.example.mindarc.data.model.ReadingContent
+import com.example.mindarc.data.model.ReadingReflection
 import com.example.mindarc.data.model.RestrictedApp
 import com.example.mindarc.data.model.UnlockSession
 import com.example.mindarc.data.model.UserProgress
@@ -23,9 +25,10 @@ import com.example.mindarc.data.model.UserProgress
         UnlockSession::class,
         UserProgress::class,
         ReadingContent::class,
-        QuizQuestion::class
+        QuizQuestion::class,
+        ReadingReflection::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -36,5 +39,5 @@ abstract class MindArcDatabase : RoomDatabase() {
     abstract fun userProgressDao(): UserProgressDao
     abstract fun readingContentDao(): ReadingContentDao
     abstract fun quizQuestionDao(): QuizQuestionDao
+    abstract fun readingReflectionDao(): ReadingReflectionDao
 }
-

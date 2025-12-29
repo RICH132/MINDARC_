@@ -1,5 +1,6 @@
 package com.example.mindarc.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -8,30 +9,47 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.mindarc.ui.components.CameraPreview
 import com.example.mindarc.ui.navigation.Screen
 import com.example.mindarc.ui.viewmodel.MindArcViewModel
+import com.example.mindarc.ui.viewmodel.PushUpCounterViewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun PushupsActivityScreen(
     navController: NavController,
-    viewModel: MindArcViewModel = viewModel()
+    mindArcViewModel: MindArcViewModel = viewModel(),
+    pushUpCounterViewModel: PushUpCounterViewModel = viewModel()
 ) {
-    var pushupCount by remember { mutableStateOf(0) }
+    val cameraPermissionState = rememberMultiplePermissionsState(
+        permissions = listOf(android.Manifest.permission.CAMERA)
+    )
+    
+    val pushUpState by pushUpCounterViewModel.state.collectAsState()
     var isCompleted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-
-    val unlockDuration = remember(pushupCount) {
-        if (pushupCount > 0) (pushupCount * 15) / 10 else 0
+    
+    val unlockDuration = remember(pushUpState.count) {
+        if (pushUpState.count > 0) (pushUpState.count * 15) / 10 else 0
     }
-    val points = remember(pushupCount) { pushupCount }
-
+    val points = remember(pushUpState.count) { pushUpState.count }
+    
+    // Connect pose detection to ViewModel
+    LaunchedEffect(Unit) {
+        // This will be handled by CameraPreview's onPoseDetected callback
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -40,144 +58,148 @@ fun PushupsActivityScreen(
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                )
             )
         }
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            if (isCompleted) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
+            // Camera Preview
+            if (cameraPermissionState.allPermissionsGranted) {
+                CameraPreview(
+                    modifier = Modifier.fillMaxSize(),
+                    onPoseDetected = { angle ->
+                        pushUpCounterViewModel.updateElbowAngle(angle)
+                    }
+                )
+            } else {
+                // Permission request UI
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Text(
+                        text = "Camera Permission Required",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "We need camera access to detect your push-ups",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { cameraPermissionState.launchMultiplePermissionRequest() }
                     ) {
-                        Text(
-                            text = "Activity Completed!",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Your apps are now unlocked",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Button(
-                            onClick = { navController.navigate(Screen.Home.route) { 
-                                popUpTo(Screen.Home.route) { inclusive = true }
-                            } },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Go to Home")
-                        }
+                        Text("Grant Permission")
                     }
                 }
-            } else {
-                Text(
-                    text = "Complete pushups to unlock your apps",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Counter Display
-                Card(
+            }
+            
+            // UI Overlay
+            if (cameraPermissionState.allPermissionsGranted && !isCompleted) {
+                Column(
                     modifier = Modifier
-                        .size(200.dp),
-                    shape = RoundedCornerShape(100.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                    // Top section: Counter and feedback
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // Counter Display
                         Text(
-                            text = "$pushupCount",
+                            text = "${pushUpState.count}",
                             style = MaterialTheme.typography.displayLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.primary
                         )
+                        Text(
+                            text = "Push-ups",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Form Feedback
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = when {
+                                    pushUpState.formFeedback.contains("Great") -> 
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    pushUpState.formFeedback.contains("Lower") -> 
+                                        MaterialTheme.colorScheme.errorContainer
+                                    else -> 
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                }
+                            )
+                        ) {
+                            Text(
+                                text = pushUpState.formFeedback,
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                color = when {
+                                    pushUpState.formFeedback.contains("Great") -> 
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    pushUpState.formFeedback.contains("Lower") -> 
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    else -> 
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                        
+                        // Angle display (for debugging, can be removed)
+                        val lastAngle = pushUpState.lastElbowAngle
+                        if (lastAngle != null) {
+                            Text(
+                                text = "Angle: ${lastAngle.toInt()}°",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
                     }
-                }
-
-                Text(
-                    text = "Pushups",
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Counter Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { if (pushupCount > 0) pushupCount-- },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("-1", fontSize = 20.sp)
-                    }
-                    OutlinedButton(
-                        onClick = { pushupCount++ },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("+1", fontSize = 20.sp)
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { if (pushupCount >= 5) pushupCount -= 5 },
-                        modifier = Modifier.weight(1f),
-                        enabled = pushupCount >= 5
-                    ) {
-                        Text("-5", fontSize = 20.sp)
-                    }
-                    OutlinedButton(
-                        onClick = { pushupCount += 5 },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("+5", fontSize = 20.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Rewards Preview
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
+                    
+                    Spacer(modifier = Modifier.weight(1f))
+                    
+                    // Bottom section: Action buttons and rewards
                     Column(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = "You'll earn:",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        // Rewards Preview
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
@@ -205,31 +227,78 @@ fun PushupsActivityScreen(
                                 )
                             }
                         }
-                    }
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Complete Button
-                Button(
-                    onClick = {
-                        if (pushupCount > 0) {
-                            scope.launch {
-                                viewModel.completePushupsActivity(pushupCount)
-                                isCompleted = true
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Action Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { pushUpCounterViewModel.resetCount() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Reset")
+                            }
+                            Button(
+                                onClick = {
+                                    if (pushUpState.count > 0) {
+                                        scope.launch {
+                                            mindArcViewModel.completePushupsActivity(pushUpState.count)
+                                            isCompleted = true
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                enabled = pushUpState.count > 0
+                            ) {
+                                Text("Complete")
                             }
                         }
-                    },
+                    }
+                }
+            }
+            
+            // Completion Screen
+            if (isCompleted) {
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    enabled = pushupCount > 0,
-                    shape = RoundedCornerShape(12.dp)
+                        .align(Alignment.Center)
+                        .padding(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
                 ) {
-                    Text("Complete Activity", fontSize = 18.sp)
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Activity Completed!",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Your apps are now unlocked",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(
+                            onClick = { 
+                                navController.navigate(Screen.Home.route) { 
+                                    popUpTo(Screen.Home.route) { inclusive = true }
+                                } 
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Go to Home")
+                        }
+                    }
                 }
             }
         }
     }
 }
-

@@ -5,11 +5,13 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.mindarc.ui.screen.ActivitySelectionScreen
+import com.example.mindarc.ui.screen.AppProvidedReadingScreen
 import com.example.mindarc.ui.screen.AppSelectionScreen
 import com.example.mindarc.ui.screen.HomeScreen
 import com.example.mindarc.ui.screen.ProgressScreen
 import com.example.mindarc.ui.screen.PushupsActivityScreen
 import com.example.mindarc.ui.screen.ReadingActivityScreen
+import com.example.mindarc.ui.screen.UserProvidedReadingScreen
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
@@ -17,14 +19,16 @@ sealed class Screen(val route: String) {
     object ActivitySelection : Screen("activity_selection")
     object PushupsActivity : Screen("pushups_activity")
     object ReadingActivity : Screen("reading_activity")
+    object AppProvidedReading : Screen("app_provided_reading")
+    object UserProvidedReading : Screen("user_provided_reading")
     object Progress : Screen("progress")
 }
 
 @Composable
-fun NavGraph(navController: NavHostController) {
+fun NavGraph(navController: NavHostController, startDestination: String?) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route
+        startDestination = if (startDestination != null) Screen.ActivitySelection.route else Screen.Home.route
     ) {
         composable(Screen.Home.route) {
             HomeScreen(navController = navController)
@@ -41,9 +45,14 @@ fun NavGraph(navController: NavHostController) {
         composable(Screen.ReadingActivity.route) {
             ReadingActivityScreen(navController = navController)
         }
+        composable(Screen.AppProvidedReading.route) {
+            AppProvidedReadingScreen(navController = navController)
+        }
+        composable(Screen.UserProvidedReading.route) {
+            UserProvidedReadingScreen(navController = navController)
+        }
         composable(Screen.Progress.route) {
             ProgressScreen(navController = navController)
         }
     }
 }
-
