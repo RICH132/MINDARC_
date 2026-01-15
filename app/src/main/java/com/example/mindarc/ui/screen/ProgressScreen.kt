@@ -1,33 +1,26 @@
 package com.example.mindarc.ui.screen
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.mindarc.data.repository.MindArcRepository
@@ -46,43 +39,52 @@ fun ProgressScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Your Progress") },
+                title = { Text("Performance", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground
+                )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item {
                 Text(
-                    text = "Your Statistics",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    text = "Key Metrics",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
 
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     StatCard(
                         title = "Total Points",
                         value = "${userProgress?.totalPoints ?: 0}",
+                        icon = Icons.Default.EmojiEvents,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
                         title = "Current Streak",
-                        value = "${userProgress?.currentStreak ?: 0} days",
+                        value = "${userProgress?.currentStreak ?: 0} Days",
+                        icon = Icons.Default.Whatshot,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -91,16 +93,18 @@ fun ProgressScreen(navController: NavController) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     StatCard(
                         title = "Longest Streak",
-                        value = "${userProgress?.longestStreak ?: 0} days",
+                        value = "${userProgress?.longestStreak ?: 0} Days",
+                        icon = Icons.Default.History,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
                         title = "Total Activities",
                         value = "${userProgress?.totalActivities ?: 0}",
+                        icon = Icons.Default.FitnessCenter,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -108,18 +112,19 @@ fun ProgressScreen(navController: NavController) {
 
             item {
                 StatCard(
-                    title = "Unlock Sessions",
+                    title = "Successful Unlock Sessions",
                     value = "${userProgress?.totalUnlockSessions ?: 0}",
+                    icon = Icons.Default.LockOpen,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
             item {
-                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Achievements",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
 
@@ -128,7 +133,8 @@ fun ProgressScreen(navController: NavController) {
                     AchievementCard(
                         title = "First Steps",
                         description = "Complete your first activity",
-                        achieved = progress.totalActivities > 0
+                        achieved = progress.totalActivities > 0,
+                        icon = Icons.Default.Stars
                     )
                 }
 
@@ -136,7 +142,8 @@ fun ProgressScreen(navController: NavController) {
                     AchievementCard(
                         title = "Week Warrior",
                         description = "Maintain a 7-day streak",
-                        achieved = progress.longestStreak >= 7
+                        achieved = progress.longestStreak >= 7,
+                        icon = Icons.Default.Timer
                     )
                 }
 
@@ -144,7 +151,8 @@ fun ProgressScreen(navController: NavController) {
                     AchievementCard(
                         title = "Month Master",
                         description = "Maintain a 30-day streak",
-                        achieved = progress.longestStreak >= 30
+                        achieved = progress.longestStreak >= 30,
+                        icon = Icons.Default.MilitaryTech
                     )
                 }
 
@@ -152,15 +160,8 @@ fun ProgressScreen(navController: NavController) {
                     AchievementCard(
                         title = "Point Collector",
                         description = "Earn 100 points",
-                        achieved = progress.totalPoints >= 100
-                    )
-                }
-
-                item {
-                    AchievementCard(
-                        title = "Century Club",
-                        description = "Earn 1000 points",
-                        achieved = progress.totalPoints >= 1000
+                        achieved = progress.totalPoints >= 100,
+                        icon = Icons.Default.Savings
                     )
                 }
             }
@@ -172,43 +173,63 @@ fun ProgressScreen(navController: NavController) {
 fun AchievementCard(
     title: String,
     description: String,
-    achieved: Boolean
+    achieved: Boolean,
+    icon: ImageVector
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (achieved) {
-                MaterialTheme.colorScheme.primaryContainer
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
             } else {
-                MaterialTheme.colorScheme.surfaceVariant
+                MaterialTheme.colorScheme.surface
             }
-        )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (achieved) 0.dp else 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Surface(
+                shape = CircleShape,
+                color = if (achieved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (achieved) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = if (achieved) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
             if (achieved) {
-                Text(
-                    text = "✓",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Achieved",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }

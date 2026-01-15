@@ -2,9 +2,12 @@ package com.example.mindarc.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.mindarc.ui.components.CameraPreview
@@ -45,22 +47,19 @@ fun PushupsActivityScreen(
     }
     val points = remember(pushUpState.count) { pushUpState.count }
     
-    // Connect pose detection to ViewModel
-    LaunchedEffect(Unit) {
-        // This will be handled by CameraPreview's onPoseDetected callback
-    }
-    
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Pushups Activity") },
+                title = { Text("Pushups", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                    containerColor = Color.Black.copy(alpha = 0.4f),
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
                 )
             )
         }
@@ -68,9 +67,8 @@ fun PushupsActivityScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
         ) {
-            // Camera Preview
+            // Camera Preview (Behind UI)
             if (cameraPermissionState.allPermissionsGranted) {
                 CameraPreview(
                     modifier = Modifier.fillMaxSize(),
@@ -83,27 +81,41 @@ fun PushupsActivityScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(MaterialTheme.colorScheme.background)
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(100.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
                     Text(
                         text = "Camera Permission Required",
                         style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "We need camera access to detect your push-ups",
-                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "MindArc uses your camera to count pushups automatically using AI pose detection.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(32.dp))
                     Button(
-                        onClick = { cameraPermissionState.launchMultiplePermissionRequest() }
+                        onClick = { cameraPermissionState.launchMultiplePermissionRequest() },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
-                        Text("Grant Permission")
+                        Text("Enable Camera")
                     }
                 }
             }
@@ -113,134 +125,91 @@ fun PushupsActivityScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .padding(padding)
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Top section: Counter and feedback
-                    Column(
+                    // Counter and Feedback (Floating Card)
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .padding(top = 16.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.Black.copy(alpha = 0.6f),
+                        contentColor = Color.White
                     ) {
-                        // Counter Display
-                        Text(
-                            text = "${pushUpState.count}",
-                            style = MaterialTheme.typography.displayLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Push-ups",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        // Form Feedback
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = when {
-                                    pushUpState.formFeedback.contains("Great") -> 
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    pushUpState.formFeedback.contains("Lower") -> 
-                                        MaterialTheme.colorScheme.errorContainer
-                                    else -> 
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                }
-                            )
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = pushUpState.formFeedback,
-                                modifier = Modifier.padding(16.dp),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                textAlign = TextAlign.Center,
-                                color = when {
-                                    pushUpState.formFeedback.contains("Great") -> 
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    pushUpState.formFeedback.contains("Lower") -> 
-                                        MaterialTheme.colorScheme.onErrorContainer
-                                    else -> 
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                }
+                                text = "${pushUpState.count}",
+                                style = MaterialTheme.typography.displayLarge,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.primaryContainer
                             )
-                        }
-                        
-                        // Angle display (for debugging, can be removed)
-                        val lastAngle = pushUpState.lastElbowAngle
-                        if (lastAngle != null) {
                             Text(
-                                text = "Angle: ${lastAngle.toInt()}°",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                modifier = Modifier.padding(top = 8.dp)
+                                text = "REPS",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color.White.copy(alpha = 0.8f)
                             )
+                            
+                            if (pushUpState.formFeedback.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = pushUpState.formFeedback.uppercase(),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (pushUpState.formFeedback.contains("Great", ignoreCase = true)) 
+                                        Color.Green else MaterialTheme.colorScheme.primaryContainer,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                     
                     Spacer(modifier = Modifier.weight(1f))
                     
-                    // Bottom section: Action buttons and rewards
+                    // Bottom Controls
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .padding(bottom = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Rewards Preview
+                        // Progress Stats
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                                .padding(16.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "$points",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Points",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "$unlockDuration",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Minutes",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
+                            RewardBadge(label = "POINTS", value = "+$points")
+                            Divider(modifier = Modifier.height(40.dp).width(1.dp), color = Color.White.copy(alpha = 0.2f))
+                            RewardBadge(label = "UNLOCK", value = "$unlockDuration min")
                         }
                         
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        // Action Buttons
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             OutlinedButton(
                                 onClick = { pushUpCounterViewModel.resetCount() },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color.White,
+                                    containerColor = Color.Black.copy(alpha = 0.3f)
+                                )
                             ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text("Reset")
                             }
+                            
                             Button(
                                 onClick = {
                                     if (pushUpState.count > 0) {
@@ -250,10 +219,17 @@ fun PushupsActivityScreen(
                                         }
                                     }
                                 },
-                                modifier = Modifier.weight(1f),
-                                enabled = pushUpState.count > 0
+                                modifier = Modifier.weight(1.5f).height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                enabled = pushUpState.count > 0,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
                             ) {
-                                Text("Complete")
+                                Icon(Icons.Default.Check, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Finish Session", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -262,43 +238,76 @@ fun PushupsActivityScreen(
             
             // Completion Screen
             if (isCompleted) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.Center)
-                        .padding(24.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
-                        Text(
-                            text = "Activity Completed!",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Your apps are now unlocked",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Button(
-                            onClick = { 
-                                navController.navigate(Screen.Home.route) { 
-                                    popUpTo(Screen.Home.route) { inclusive = true }
-                                } 
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                        Column(
+                            modifier = Modifier.padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("Go to Home")
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(80.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Text(
+                                text = "Great Job!",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "You've earned $points points and unlocked your apps for $unlockDuration minutes.",
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(32.dp))
+                            Button(
+                                onClick = { 
+                                    navController.navigate(Screen.Home.route) { 
+                                        popUpTo(Screen.Home.route) { inclusive = true }
+                                    } 
+                                },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Return Home", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun RewardBadge(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.6f)
+        )
     }
 }
