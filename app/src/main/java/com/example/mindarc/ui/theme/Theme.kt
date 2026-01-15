@@ -9,42 +9,80 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+// Local composition for dark mode state management
+val LocalDarkModePreference = compositionLocalOf<DarkModePreference> { 
+    error("No DarkModePreference provided") 
+}
+
+enum class DarkModePreference {
+    LIGHT, DARK, SYSTEM
+}
+
+// State holder for dark mode preference
+class DarkModeState {
+    var preference by mutableStateOf(DarkModePreference.SYSTEM)
+}
+
+val LocalDarkModeState = staticCompositionLocalOf<DarkModeState> { 
+    error("No DarkModeState provided") 
+}
+
 private val DarkColorScheme = darkColorScheme(
     primary = PrimaryDarkTheme,
     secondary = SecondaryDarkTheme,
-    tertiary = SecondaryLight,
+    tertiary = TertiaryDarkTheme,
     background = BackgroundDark,
     surface = SurfaceDark,
-    onPrimary = Color.Black,
-    onSecondary = Color.Black,
-    onBackground = Color.White,
-    onSurface = Color.White
+    surfaceVariant = SurfaceVariantDark,
+    onPrimary = OnPrimaryDark,
+    onSecondary = OnSecondaryDark,
+    onTertiary = OnTertiaryDark,
+    onBackground = OnBackgroundDark,
+    onSurface = OnSurfaceDark,
+    onSurfaceVariant = OnSurfaceVariantDark,
+    outline = OutlineDark,
+    outlineVariant = OutlineVariantDark,
+    error = Error,
+    onError = OnError
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = PrimaryMain,
     secondary = SecondaryMain,
-    tertiary = SecondaryLight,
+    tertiary = TertiaryMain,
     background = Background,
     surface = Surface,
+    surfaceVariant = SurfaceVariant,
     onPrimary = OnPrimary,
     onSecondary = OnSecondary,
+    onTertiary = OnTertiary,
     onBackground = OnBackground,
-    onSurface = OnSurface
+    onSurface = OnSurface,
+    onSurfaceVariant = OnSurfaceVariant,
+    outline = Outline,
+    outlineVariant = OutlineVariant,
+    error = Error,
+    onError = OnError
 )
 
 @Composable
 fun MindArcTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = false, // Set to false to use our custom modern palette consistently
+    dynamicColor: Boolean = false, // Set to false to use our custom premium palette consistently
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -59,9 +97,13 @@ fun MindArcTheme(
 
     val view = LocalView.current
     if (!view.isInEditMode) {
-        SideEffect {
+        androidx.compose.runtime.SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
+            window.statusBarColor = if (darkTheme) {
+                BackgroundDark.toArgb()
+            } else {
+                Background.toArgb()
+            }
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

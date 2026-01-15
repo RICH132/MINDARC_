@@ -1,5 +1,6 @@
 package com.example.mindarc.ui.screen
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -8,10 +9,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -49,26 +53,23 @@ fun PushupsActivityScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Pushups", fontWeight = FontWeight.Bold) },
+            CenterAlignedTopAppBar(
+                title = { Text("AI Pushup Counter", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black.copy(alpha = 0.4f),
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color.Black.copy(alpha = 0.3f),
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
         }
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-        ) {
-            // Camera Preview (Behind UI)
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Camera Preview (Full Screen)
             if (cameraPermissionState.allPermissionsGranted) {
                 CameraPreview(
                     modifier = Modifier.fillMaxSize(),
@@ -77,47 +78,7 @@ fun PushupsActivityScreen(
                     }
                 )
             } else {
-                // Permission request UI
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background)
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(100.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = "Camera Permission Required",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "MindArc uses your camera to count pushups automatically using AI pose detection.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Button(
-                        onClick = { cameraPermissionState.launchMultiplePermissionRequest() },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                    ) {
-                        Text("Enable Camera")
-                    }
-                }
+                PermissionRequestUI(onGrant = { cameraPermissionState.launchMultiplePermissionRequest() })
             }
             
             // UI Overlay
@@ -126,44 +87,53 @@ fun PushupsActivityScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Counter and Feedback (Floating Card)
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color.Black.copy(alpha = 0.6f),
-                        contentColor = Color.White
+                    // Feedback Card
+                    AnimatedVisibility(
+                        visible = pushUpState.formFeedback.isNotEmpty(),
+                        enter = fadeIn() + slideInVertically(),
+                        exit = fadeOut() + slideOutVertically()
                     ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (pushUpState.formFeedback.contains("Great", true)) 
+                                Color(0xFF4CAF50).copy(alpha = 0.9f) 
+                            else 
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                            modifier = Modifier.padding(bottom = 16.dp)
                         ) {
                             Text(
-                                text = "${pushUpState.count}",
-                                style = MaterialTheme.typography.displayLarge,
-                                fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.primaryContainer
-                            )
-                            Text(
-                                text = "REPS",
+                                text = pushUpState.formFeedback.uppercase(),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                 style = MaterialTheme.typography.labelLarge,
-                                color = Color.White.copy(alpha = 0.8f)
+                                color = Color.White,
+                                fontWeight = FontWeight.Black
                             )
-                            
-                            if (pushUpState.formFeedback.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+
+                    // Main Counter
+                    Surface(
+                        modifier = Modifier.size(160.dp),
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.5f),
+                        border = androidx.compose.foundation.BorderStroke(4.dp, MaterialTheme.colorScheme.primary)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = pushUpState.formFeedback.uppercase(),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (pushUpState.formFeedback.contains("Great", ignoreCase = true)) 
-                                        Color.Green else MaterialTheme.colorScheme.primaryContainer,
-                                    textAlign = TextAlign.Center
+                                    text = "${pushUpState.count}",
+                                    style = MaterialTheme.typography.displayLarge,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "REPS",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
@@ -171,83 +141,86 @@ fun PushupsActivityScreen(
                     
                     Spacer(modifier = Modifier.weight(1f))
                     
-                    // Bottom Controls
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    // Stats and Controls Card
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(28.dp),
+                        color = Color.Black.copy(alpha = 0.6f)
                     ) {
-                        // Progress Stats
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            RewardBadge(label = "POINTS", value = "+$points")
-                            Divider(modifier = Modifier.height(40.dp).width(1.dp), color = Color.White.copy(alpha = 0.2f))
-                            RewardBadge(label = "UNLOCK", value = "$unlockDuration min")
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { pushUpCounterViewModel.resetCount() },
-                                modifier = Modifier.weight(1f).height(56.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Color.White,
-                                    containerColor = Color.Black.copy(alpha = 0.3f)
-                                )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Reset")
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("+$points", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("POINTS", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                                }
+                                VerticalDivider(modifier = Modifier.height(32.dp), color = Color.White.copy(alpha = 0.2f))
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("$unlockDuration min", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("UNLOCK", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                                }
                             }
                             
-                            Button(
-                                onClick = {
-                                    if (pushUpState.count > 0) {
-                                        scope.launch {
-                                            mindArcViewModel.completePushupsActivity(pushUpState.count)
-                                            isCompleted = true
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1.5f).height(56.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                enabled = pushUpState.count > 0,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Finish Session", fontWeight = FontWeight.Bold)
+                                IconButton(
+                                    onClick = { pushUpCounterViewModel.resetCount() },
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Color.White)
+                                }
+                                
+                                Button(
+                                    onClick = {
+                                        if (pushUpState.count > 0) {
+                                            scope.launch {
+                                                mindArcViewModel.completePushupsActivity(pushUpState.count)
+                                                isCompleted = true
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f).height(56.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    enabled = pushUpState.count > 0,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                    )
+                                ) {
+                                    Icon(Icons.Default.Check, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Finish Workout", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
                 }
             }
             
-            // Completion Screen
+            // Completion Screen Overlay
             if (isCompleted) {
                 Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.85f))
+                        .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    Surface(
+                        shape = RoundedCornerShape(32.dp),
+                        color = MaterialTheme.colorScheme.surface
                     ) {
                         Column(
                             modifier = Modifier.padding(32.dp),
@@ -263,29 +236,25 @@ fun PushupsActivityScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.height(24.dp))
+                            Text("Incredible Work!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
                             Text(
-                                text = "Great Job!",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "You've earned $points points and unlocked your apps for $unlockDuration minutes.",
+                                text = "You smashed $pushUpState.count pushups, earned $points points and unlocked your apps for $unlockDuration minutes.",
                                 style = MaterialTheme.typography.bodyLarge,
                                 textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp)
                             )
-                            Spacer(modifier = Modifier.height(32.dp))
+                            Spacer(modifier = Modifier.height(40.dp))
                             Button(
                                 onClick = { 
                                     navController.navigate(Screen.Home.route) { 
                                         popUpTo(Screen.Home.route) { inclusive = true }
                                     } 
                                 },
-                                modifier = Modifier.fillMaxWidth().height(56.dp),
-                                shape = RoundedCornerShape(12.dp)
+                                modifier = Modifier.fillMaxWidth().height(60.dp),
+                                shape = RoundedCornerShape(16.dp)
                             ) {
-                                Text("Return Home", fontWeight = FontWeight.Bold)
+                                Text("Return Home", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             }
                         }
                     }
@@ -296,18 +265,44 @@ fun PushupsActivityScreen(
 }
 
 @Composable
-fun RewardBadge(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+fun PermissionRequestUI(onGrant: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.errorContainer,
+            modifier = Modifier.size(100.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.VideocamOff, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error)
+            }
+        }
+        Spacer(modifier = Modifier.height(32.dp))
         Text(
-            text = value,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
+            text = "Camera Access Needed",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
         )
         Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.6f)
+            text = "To count your pushups accurately, MindArc uses AI to detect your posture through the camera.",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp)
         )
+        Spacer(modifier = Modifier.height(40.dp))
+        Button(
+            onClick = onGrant,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().height(56.dp)
+        ) {
+            Text("Enable Camera Access", fontWeight = FontWeight.Bold)
+        }
     }
 }

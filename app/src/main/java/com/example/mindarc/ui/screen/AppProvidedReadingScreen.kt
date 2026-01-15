@@ -1,36 +1,30 @@
 package com.example.mindarc.ui.screen
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.mindarc.data.model.QuizQuestion
@@ -72,90 +66,262 @@ fun AppProvidedReadingScreen(navController: NavController) {
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(readingContent?.title ?: "Read an Article") })
-        }
+            CenterAlignedTopAppBar(
+                title = { 
+                    Text(
+                        readingContent?.title ?: "Article", 
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    ) 
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (readingContent != null) {
                 if (!isTimerRunning && !isTimerFinished) {
-                    Text("You have ${readingContent!!.estimatedReadingTimeMinutes} minutes to read the article. Start the timer when you are ready.")
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { isTimerRunning = true }) {
-                        Text("Start Reading")
-                    }
-                } else if (isTimerRunning && !isTimerFinished) {
-                    Text(
-                        text = "${timeLeft / 60}:${(timeLeft % 60).toString().padStart(2, '0')}",
-                        style = MaterialTheme.typography.headlineLarge
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = readingContent!!.content, modifier = Modifier.verticalScroll(rememberScrollState()))
-                } else if (!isQuizFinished) {
-                    QuizQuestion(quizQuestions[currentQuestionIndex], selectedAnswer) { selectedAnswer = it }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = {
-                            if (selectedAnswer == quizQuestions[currentQuestionIndex].correctAnswer) {
-                                score += 10
-                            }
-                            selectedAnswer = null
-                            currentQuestionIndex++
-                        },
-                        enabled = selectedAnswer != null
+                    Spacer(modifier = Modifier.weight(0.5f))
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(120.dp)
                     ) {
-                        Text(if (currentQuestionIndex < quizQuestions.size - 1) "Next Question" else "Finish Quiz")
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Text(
+                        text = "Ready to Read?",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "You'll have ${readingContent!!.estimatedReadingTimeMinutes} minutes to finish this article before the quiz starts.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(48.dp))
+                    Button(
+                        onClick = { isTimerRunning = true },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Start Reading", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                } else if (isTimerRunning && !isTimerFinished) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = readingContent?.category ?: "Knowledge",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = "${timeLeft / 60}:${(timeLeft % 60).toString().padStart(2, '0')}",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                    
+                    LinearProgressIndicator(
+                        progress = { timeLeft.toFloat() / totalTimeInSeconds },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(CircleShape),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Text(
+                        text = readingContent!!.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        lineHeight = 28.sp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                    )
+                    
+                    Button(
+                        onClick = { timeLeft = 0 },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp)
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text("I'm finished reading early")
+                    }
+                } else if (!isQuizFinished) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Knowledge Check",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Question ${currentQuestionIndex + 1} of ${quizQuestions.size}",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        QuizQuestionView(
+                            question = quizQuestions[currentQuestionIndex], 
+                            selectedOption = selectedAnswer, 
+                            onOptionSelected = { selectedAnswer = it }
+                        )
+                        
+                        Spacer(modifier = Modifier.weight(1f))
+                        
+                        Button(
+                            onClick = {
+                                if (selectedAnswer == quizQuestions[currentQuestionIndex].correctAnswer) {
+                                    score += 10
+                                }
+                                selectedAnswer = null
+                                currentQuestionIndex++
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = selectedAnswer != null
+                        ) {
+                            Text(
+                                if (currentQuestionIndex < quizQuestions.size - 1) "Next Question" else "Finish Quiz",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 } else {
-                    Text("Quiz Finished!", style = MaterialTheme.typography.headlineMedium)
-                    Text("You scored $score points!", style = MaterialTheme.typography.bodyLarge)
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.weight(0.5f))
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(100.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Text("Session Complete!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "You earned $score points for this reading session.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(48.dp))
                     Button(
                         onClick = {
                             viewModel.saveAppProvidedReading(totalTimeInSeconds / 60, score)
-                            navController.navigate(Screen.ActivitySelection.route) {
-                                popUpTo(Screen.ActivitySelection.route) {
-                                    inclusive = true
-                                }
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Home.route) { inclusive = true }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text("Continue")
+                        Text("Collect Rewards", fontWeight = FontWeight.Bold)
                     }
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             } else {
-                CircularProgressIndicator()
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             }
         }
     }
 }
 
 @Composable
-fun QuizQuestion(question: QuizQuestion, selectedOption: String?, onOptionSelected: (String) -> Unit) {
-    val options = listOf(question.option1, question.option2, question.option3, question.option4).shuffled()
+fun QuizQuestionView(question: QuizQuestion, selectedOption: String?, onOptionSelected: (String) -> Unit) {
+    val options = remember(question) {
+        listOf(question.option1, question.option2, question.option3, question.option4).shuffled()
+    }
 
-    Column {
-        Text(question.question, style = MaterialTheme.typography.bodyLarge)
-        Spacer(modifier = Modifier.height(16.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = question.question, 
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Medium,
+            lineHeight = 32.sp
+        )
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
         options.forEach { option ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .selectable(selected = (option == selectedOption)) { onOptionSelected(option) }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            val isSelected = option == selectedOption
+            Surface(
+                onClick = { onOptionSelected(option) },
+                shape = RoundedCornerShape(16.dp),
+                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp, 
+                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                RadioButton(
-                    selected = (option == selectedOption),
-                    onClick = { onOptionSelected(option) }
-                )
-                Text(text = option, modifier = Modifier.padding(start = 8.dp))
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = isSelected,
+                        onClick = { onOptionSelected(option) }
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = option,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }

@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
         val blockedPackage = intent.getStringExtra("blocked_package")
         
         setContent {
+            // Dark mode is automatically detected from system settings via isSystemInDarkTheme()
             MindArcTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
