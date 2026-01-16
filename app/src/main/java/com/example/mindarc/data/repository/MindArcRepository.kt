@@ -127,6 +127,10 @@ class MindArcRepository(context: Context) {
     fun getProgress(): Flow<UserProgress?> = userProgressDao.getProgress()
     suspend fun getProgressSync(): UserProgress? = userProgressDao.getProgressSync()
 
+    suspend fun updateProgress(progress: UserProgress) {
+        userProgressDao.updateProgress(progress)
+    }
+
     suspend fun updateProgressAfterActivity(points: Int) {
         val progress = userProgressDao.getProgressSync() ?: UserProgress()
         val calendar = Calendar.getInstance()

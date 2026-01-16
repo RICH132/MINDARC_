@@ -1,19 +1,17 @@
 package com.example.mindarc.data.processor
 
+import android.util.Size
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.example.mindarc.domain.PoseAnalyzer
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.PoseDetector
 import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
 
-/**
- * Processes camera frames for pose detection using ML Kit.
- * This is part of the data layer as it handles external ML Kit API interactions.
- */
 class PoseDetectionProcessor(
-    private val onPoseDetected: (Float?) -> Unit
+    private val onPoseDetected: (PoseAnalyzer.PushUpMetrics, Pose?, Size) -> Unit
 ) : ImageAnalysis.Analyzer {
     
     private val poseAnalyzer = PoseAnalyzer()
@@ -32,13 +30,29 @@ class PoseDetectionProcessor(
                 imageProxy.imageInfo.rotationDegrees
             )
             
+            // Normalize size based on rotation
+            val width = if (imageProxy.imageInfo.rotationDegrees % 180 == 0) imageProxy.width else imageProxy.height
+            val height = if (imageProxy.imageInfo.rotationDegrees % 180 == 0) imageProxy.height else imageProxy.width
+            val imageSize = Size(width, height)
+            
             poseDetector.process(image)
                 .addOnSuccessListener { pose ->
-                    val angle = poseAnalyzer.getBestArmAngle(pose)
-                    onPoseDetected(angle)
+                    val metrics = poseAnalyzer.analyzePushUpPose(pose, width, height)
+                    onPoseDetected(metrics, pose, imageSize)
                 }
                 .addOnFailureListener {
-                    onPoseDetected(null)
+                    onPoseDetected(
+                        PoseAnalyzer.PushUpMetrics(
+                            elbowAngle = null,
+                            repCount = 0,
+                            depthPercentage = 0,
+                            feedback = "Detection failed",
+                            isHorizontal = false,
+                            confidence = 0f
+                        ),
+                        null,
+                        imageSize
+                    )
                 }
                 .addOnCompleteListener {
                     imageProxy.close()

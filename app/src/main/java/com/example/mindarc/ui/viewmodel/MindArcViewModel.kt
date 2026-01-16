@@ -74,6 +74,32 @@ class MindArcViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun spendPointsToUnlock(points: Int, durationMinutes: Int = 15) {
+        viewModelScope.launch {
+            val progress = repository.getProgressSync() ?: return@launch
+            if (progress.totalPoints >= points) {
+                // Deduct points
+                val updatedProgress = progress.copy(
+                    totalPoints = progress.totalPoints - points
+                )
+                repository.updateProgress(updatedProgress)
+                
+                // Create a special activity record for "Point Spend" or just create session
+                val activityId = repository.insertActivity(
+                    ActivityRecord(
+                        activityType = ActivityType.PUSHUPS, // Temporary, maybe add ACTIVITY_SPEND
+                        pointsEarned = -points,
+                        unlockDurationMinutes = durationMinutes
+                    )
+                )
+                
+                val session = repository.createUnlockSession(activityId, durationMinutes)
+                _activeSession.value = session
+                repository.updateProgressAfterUnlock()
+            }
+        }
+    }
+
     suspend fun completePushupsActivity(pushups: Int): Long {
         val points = repository.calculatePoints(pushups)
         val unlockDuration = repository.calculateUnlockDuration(pushups)
@@ -130,8 +156,6 @@ class MindArcViewModel(application: Application) : AndroidViewModel(application)
         val session = _activeSession.value
         return session != null && 
                session.isActive && 
-               System.currentTimeMillis() < session.endTime &&
-               _restrictedApps.value.any { it.packageName == packageName && it.isBlocked }
+               System.currentTimeMillis() < session.endTime
     }
 }
-

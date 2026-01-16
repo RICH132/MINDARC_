@@ -1,6 +1,7 @@
 package com.example.mindarc.ui.screen
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -15,8 +16,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -24,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.mindarc.ui.components.CameraPreview
+import com.example.mindarc.ui.components.PoseOverlay
 import com.example.mindarc.ui.navigation.Screen
 import com.example.mindarc.ui.viewmodel.MindArcViewModel
 import com.example.mindarc.ui.viewmodel.PushUpCounterViewModel
@@ -73,10 +76,23 @@ fun PushupsActivityScreen(
             if (cameraPermissionState.allPermissionsGranted) {
                 CameraPreview(
                     modifier = Modifier.fillMaxSize(),
-                    onPoseDetected = { angle ->
-                        pushUpCounterViewModel.updateElbowAngle(angle)
+                    onPoseDetected = { metrics, pose, size ->
+                        pushUpCounterViewModel.updateMetrics(metrics, pose, size)
                     }
                 )
+                
+                // Skeleton Overlay
+                if (pushUpState.imageSize.width > 0) {
+                    PoseOverlay(
+                        modifier = Modifier.fillMaxSize(),
+                        pose = pushUpState.currentPose,
+                        imageSize = pushUpState.imageSize,
+                        metrics = null // We don't need text metrics inside PoseOverlay for now
+                    )
+                }
+                
+                // Placeholder Guide Lines for Pushup Position
+                PushupGuideOverlay()
             } else {
                 PermissionRequestUI(onGrant = { cameraPermissionState.launchMultiplePermissionRequest() })
             }
@@ -98,10 +114,11 @@ fun PushupsActivityScreen(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (pushUpState.formFeedback.contains("Great", true)) 
-                                Color(0xFF4CAF50).copy(alpha = 0.9f) 
-                            else 
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                            color = when {
+                                pushUpState.formFeedback.contains("Complete", true) -> Color(0xFF4CAF50).copy(alpha = 0.9f)
+                                !pushUpState.isGoodForm && pushUpState.isDetecting -> Color(0xFFF44336).copy(alpha = 0.9f)
+                                else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                            },
                             modifier = Modifier.padding(bottom = 16.dp)
                         ) {
                             Text(
@@ -119,7 +136,10 @@ fun PushupsActivityScreen(
                         modifier = Modifier.size(160.dp),
                         shape = CircleShape,
                         color = Color.Black.copy(alpha = 0.5f),
-                        border = androidx.compose.foundation.BorderStroke(4.dp, MaterialTheme.colorScheme.primary)
+                        border = androidx.compose.foundation.BorderStroke(
+                            4.dp, 
+                            if (pushUpState.isGoodForm) MaterialTheme.colorScheme.primary else Color.Gray
+                        )
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -211,53 +231,88 @@ fun PushupsActivityScreen(
             
             // Completion Screen Overlay
             if (isCompleted) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.85f))
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(32.dp),
-                        color = MaterialTheme.colorScheme.surface
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(80.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Text("Incredible Work!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                            Text(
-                                text = "You smashed $pushUpState.count pushups, earned $points points and unlocked your apps for $unlockDuration minutes.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
-                            Spacer(modifier = Modifier.height(40.dp))
-                            Button(
-                                onClick = { 
-                                    navController.navigate(Screen.Home.route) { 
-                                        popUpTo(Screen.Home.route) { inclusive = true }
-                                    } 
-                                },
-                                modifier = Modifier.fillMaxWidth().height(60.dp),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Text("Return Home", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            }
-                        }
+                CompletionOverlay(pushUpState.count, points, unlockDuration) {
+                    navController.navigate(Screen.Home.route) { 
+                        popUpTo(Screen.Home.route) { inclusive = true }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PushupGuideOverlay() {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val width = size.width
+        val height = size.height
+        
+        // Horizontal guide lines for torso/floor placement
+        val strokeWidth = 2.dp.toPx()
+        val pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+        
+        // Floor line
+        drawLine(
+            color = Color.White.copy(alpha = 0.3f),
+            start = Offset(0f, height * 0.8f),
+            end = Offset(width, height * 0.8f),
+            strokeWidth = strokeWidth,
+            pathEffect = pathEffect
+        )
+        
+        // Shoulder line
+        drawLine(
+            color = Color.White.copy(alpha = 0.3f),
+            start = Offset(0f, height * 0.5f),
+            end = Offset(width, height * 0.5f),
+            strokeWidth = strokeWidth,
+            pathEffect = pathEffect
+        )
+    }
+}
+
+@Composable
+fun CompletionOverlay(count: Int, points: Int, duration: Int, onHome: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.85f))
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier.padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(80.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Incredible Work!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                Text(
+                    text = "You smashed $count pushups, earned $points points and unlocked your apps for $duration minutes.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Spacer(modifier = Modifier.height(40.dp))
+                Button(
+                    onClick = onHome,
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("Return Home", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
         }

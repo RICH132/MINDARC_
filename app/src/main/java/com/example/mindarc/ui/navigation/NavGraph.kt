@@ -2,8 +2,10 @@ package com.example.mindarc.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.example.mindarc.ui.screen.ActivitySelectionScreen
 import com.example.mindarc.ui.screen.AppProvidedReadingScreen
 import com.example.mindarc.ui.screen.AppSelectionScreen
@@ -12,6 +14,7 @@ import com.example.mindarc.ui.screen.ProgressScreen
 import com.example.mindarc.ui.screen.PushupsActivityScreen
 import com.example.mindarc.ui.screen.ReadingActivityScreen
 import com.example.mindarc.ui.screen.UserProvidedReadingScreen
+import com.example.mindarc.ui.screen.LockWarningScreen
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
@@ -22,13 +25,16 @@ sealed class Screen(val route: String) {
     object AppProvidedReading : Screen("app_provided_reading")
     object UserProvidedReading : Screen("user_provided_reading")
     object Progress : Screen("progress")
+    object LockWarning : Screen("lock_warning/{packageName}") {
+        fun createRoute(packageName: String) = "lock_warning/$packageName"
+    }
 }
 
 @Composable
 fun NavGraph(navController: NavHostController, startDestination: String?) {
     NavHost(
         navController = navController,
-        startDestination = if (startDestination != null) Screen.ActivitySelection.route else Screen.Home.route
+        startDestination = if (startDestination != null) Screen.LockWarning.createRoute(startDestination) else Screen.Home.route
     ) {
         composable(Screen.Home.route) {
             HomeScreen(navController = navController)
@@ -53,6 +59,13 @@ fun NavGraph(navController: NavHostController, startDestination: String?) {
         }
         composable(Screen.Progress.route) {
             ProgressScreen(navController = navController)
+        }
+        composable(
+            route = Screen.LockWarning.route,
+            arguments = listOf(navArgument("packageName") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val packageName = backStackEntry.arguments?.getString("packageName") ?: ""
+            LockWarningScreen(navController = navController, packageName = packageName)
         }
     }
 }

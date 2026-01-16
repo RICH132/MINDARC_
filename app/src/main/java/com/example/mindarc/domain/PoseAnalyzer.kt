@@ -4,117 +4,98 @@ import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 import kotlin.math.*
 
-/**
- * Domain layer component for analyzing pose data and calculating angles.
- * Follows Clean Architecture principles by keeping business logic separate.
- */
 class PoseAnalyzer {
     
-    /**
-     * Calculates the angle at the elbow joint using three points:
-     * Shoulder -> Elbow -> Wrist
-     * 
-     * @param shoulder The shoulder landmark
-     * @param elbow The elbow landmark
-     * @param wrist The wrist landmark
-     * @return The angle in degrees, or null if any landmark is missing
-     */
-    fun calculateElbowAngle(
-        shoulder: PoseLandmark?,
-        elbow: PoseLandmark?,
-        wrist: PoseLandmark?
-    ): Float? {
-        if (shoulder == null || elbow == null || wrist == null) {
-            return null
-        }
-        
-        val shoulderPoint = shoulder.position3D
-        val elbowPoint = elbow.position3D
-        val wristPoint = wrist.position3D
-        
-        // Calculate vectors
-        val vector1 = Point3D(
-            shoulderPoint.x - elbowPoint.x,
-            shoulderPoint.y - elbowPoint.y,
-            shoulderPoint.z - elbowPoint.z
-        )
-        
-        val vector2 = Point3D(
-            wristPoint.x - elbowPoint.x,
-            wristPoint.y - elbowPoint.y,
-            wristPoint.z - elbowPoint.z
-        )
-        
-        // Calculate angle using dot product
-        val dotProduct = vector1.x * vector2.x + vector1.y * vector2.y + vector1.z * vector2.z
-        val magnitude1 = sqrt(vector1.x * vector1.x + vector1.y * vector1.y + vector1.z * vector1.z)
-        val magnitude2 = sqrt(vector2.x * vector2.x + vector2.y * vector2.y + vector2.z * vector2.z)
-        
-        if (magnitude1 == 0f || magnitude2 == 0f) {
-            return null
-        }
-        
-        val cosAngle = dotProduct / (magnitude1 * magnitude2)
-        // Clamp to avoid NaN from acos
-        val clampedCos = cosAngle.coerceIn(-1f, 1f)
-        val angleRadians = acos(clampedCos)
-        // Convert radians to degrees: degrees = radians * 180 / PI
-        val angleDegrees = (angleRadians * 180f / PI).toFloat()
-        
-        return angleDegrees
-    }
+    data class PushUpMetrics(
+        val elbowAngle: Float?,
+        val repCount: Int,
+        val depthPercentage: Int,
+        val feedback: String,
+        val isHorizontal: Boolean,
+        val confidence: Float
+    )
+
+    private var repCount = 0
+    private var isInRep = false // Tracks if we are currently in the "Down" phase
     
-    /**
-     * Gets the left arm landmarks from a pose
-     */
-    fun getLeftArmLandmarks(pose: Pose): Triple<PoseLandmark?, PoseLandmark?, PoseLandmark?> {
-        return Triple(
+    private val DOWN_THRESHOLD = 95f
+    private val UP_THRESHOLD = 160f
+
+    fun analyzePushUpPose(pose: Pose, imageWidth: Int, imageHeight: Int): PushUpMetrics {
+        val leftAngle = calculateElbowAngle(
             pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER),
             pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW),
             pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
         )
-    }
-    
-    /**
-     * Gets the right arm landmarks from a pose
-     */
-    fun getRightArmLandmarks(pose: Pose): Triple<PoseLandmark?, PoseLandmark?, PoseLandmark?> {
-        return Triple(
+        val rightAngle = calculateElbowAngle(
             pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER),
             pose.getPoseLandmark(PoseLandmark.RIGHT_ELBOW),
             pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
         )
+
+        val leftConf = pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW)?.inFrameLikelihood ?: 0f
+        val rightConf = pose.getPoseLandmark(PoseLandmark.RIGHT_ELBOW)?.inFrameLikelihood ?: 0f
+
+        // Robust Elbow Angle: Average of both if visible, otherwise the best visible one
+        val currentAngle = when {
+            leftAngle != null && rightAngle != null -> (leftAngle + rightAngle) / 2f
+            leftAngle != null && leftConf > 0.5f -> leftAngle
+            rightAngle != null && rightConf > 0.5f -> rightAngle
+            else -> null
+        }
+
+        // Rep Counting Logic
+        if (currentAngle != null) {
+            if (!isInRep && currentAngle < DOWN_THRESHOLD) {
+                isInRep = true
+            } else if (isInRep && currentAngle > UP_THRESHOLD) {
+                isInRep = false
+                repCount++
+            }
+        }
+
+        // Depth Percentage Calculation (160° is 0%, 95° is 100%)
+        val depthPercentage = if (currentAngle != null) {
+            val progress = (UP_THRESHOLD - currentAngle) / (UP_THRESHOLD - DOWN_THRESHOLD)
+            (progress * 100).toInt().coerceIn(0, 100)
+        } else 0
+
+        val feedback = when {
+            currentAngle == null -> "Position your arms"
+            currentAngle < DOWN_THRESHOLD -> "Good depth! Now push up"
+            isInRep -> "Pushing up..."
+            else -> "Go lower"
+        }
+
+        // Simple plank check
+        val shoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER) ?: pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
+        val hip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP) ?: pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
+        val isHorizontal = shoulder != null && hip != null && 
+                          abs(shoulder.position.x - hip.position.x) > (imageWidth * 0.2f)
+
+        return PushUpMetrics(
+            elbowAngle = currentAngle,
+            repCount = repCount,
+            depthPercentage = depthPercentage,
+            feedback = feedback,
+            isHorizontal = isHorizontal,
+            confidence = shoulder?.inFrameLikelihood ?: 0f
+        )
+    }
+
+    private fun calculateElbowAngle(s: PoseLandmark?, e: PoseLandmark?, w: PoseLandmark?): Float? {
+        if (s == null || e == null || w == null) return null
+        val sP = s.position3D; val eP = e.position3D; val wP = w.position3D
+        val v1 = floatArrayOf(sP.x - eP.x, sP.y - eP.y, sP.z - eP.z)
+        val v2 = floatArrayOf(wP.x - eP.x, wP.y - eP.y, wP.z - eP.z)
+        val dot = v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2]
+        val m1 = sqrt(v1[0]*v1[0] + v1[1]*v1[1] + v1[2]*v1[2])
+        val m2 = sqrt(v2[0]*v2[0] + v2[1]*v2[1] + v2[2]*v2[2])
+        return if (m1 == 0f || m2 == 0f) null else (acos((dot/(m1*m2)).coerceIn(-1f, 1f)) * 180f / PI).toFloat()
     }
     
-    /**
-     * Determines which arm is more visible/accurate based on confidence scores
-     */
-    fun getBestArmAngle(pose: Pose): Float? {
-        val leftArm = getLeftArmLandmarks(pose)
-        val rightArm = getRightArmLandmarks(pose)
-        
-        val leftAngle = calculateElbowAngle(leftArm.first, leftArm.second, leftArm.third)
-        val rightAngle = calculateElbowAngle(rightArm.first, rightArm.second, rightArm.third)
-        
-        // Prefer the arm with better visibility (higher confidence)
-        val leftConfidence = leftArm.second?.inFrameLikelihood ?: 0f
-        val rightConfidence = rightArm.second?.inFrameLikelihood ?: 0f
-        
-        return when {
-            leftConfidence > rightConfidence && leftConfidence > 0.5f -> leftAngle
-            rightConfidence > 0.5f -> rightAngle
-            leftAngle != null -> leftAngle
-            else -> rightAngle
-        }
+    fun resetReps() {
+        repCount = 0
+        isInRep = false
     }
 }
-
-/**
- * Simple 3D point data class
- */
-private data class Point3D(
-    val x: Float,
-    val y: Float,
-    val z: Float
-)
-

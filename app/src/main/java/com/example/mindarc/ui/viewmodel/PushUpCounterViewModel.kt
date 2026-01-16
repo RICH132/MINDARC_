@@ -1,7 +1,9 @@
 package com.example.mindarc.ui.viewmodel
 
+import android.util.Size
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import com.example.mindarc.domain.PoseAnalyzer
+import com.google.mlkit.vision.pose.Pose
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,62 +12,32 @@ data class PushUpCounterState(
     val count: Int = 0,
     val formFeedback: String = "Position yourself in front of the camera",
     val isDetecting: Boolean = false,
-    val lastElbowAngle: Float? = null
+    val depthPercentage: Int = 0,
+    val isGoodForm: Boolean = false,
+    val currentPose: Pose? = null,
+    val imageSize: Size = Size(0, 0)
 )
 
 class PushUpCounterViewModel : ViewModel() {
     private val _state = MutableStateFlow(PushUpCounterState())
     val state: StateFlow<PushUpCounterState> = _state.asStateFlow()
-    
-    private var wasDown = false // Track if we were in the down position
-    
-    fun updateElbowAngle(angle: Float?) {
-        val currentState = _state.value
-        _state.value = currentState.copy(
-            lastElbowAngle = angle,
-            isDetecting = angle != null
-        )
-        
-        angle?.let { currentAngle ->
-            val feedback = when {
-                currentAngle < 90 -> {
-                    wasDown = true
-                    "Go Lower"
-                }
-                currentAngle > 160 && wasDown -> {
-                    wasDown = false
-                    incrementCount()
-                    "Great Rep!"
-                }
-                currentAngle > 160 -> {
-                    wasDown = false
-                    "Good Position"
-                }
-                else -> {
-                    "Keep Going"
-                }
-            }
-            
-            _state.value = _state.value.copy(formFeedback = feedback)
-        } ?: run {
-            _state.value = _state.value.copy(
-                formFeedback = "Position yourself in front of the camera",
-                isDetecting = false
-            )
-        }
-    }
-    
-    private fun incrementCount() {
-        _state.value = _state.value.copy(
-            count = _state.value.count + 1
-        )
-    }
-    
-    fun resetCount() {
-        _state.value = PushUpCounterState()
-        wasDown = false
-    }
-    
-    fun getCurrentCount(): Int = _state.value.count
-}
 
+    fun updateMetrics(metrics: PoseAnalyzer.PushUpMetrics, pose: Pose?, size: Size) {
+        _state.value = _state.value.copy(
+            count = metrics.repCount,
+            formFeedback = metrics.feedback,
+            isDetecting = metrics.confidence > 0.5f,
+            depthPercentage = metrics.depthPercentage,
+            isGoodForm = metrics.isHorizontal,
+            currentPose = pose,
+            imageSize = size
+        )
+    }
+
+    fun resetCount() {
+        // Note: The actual repCount is currently held in the PoseAnalyzer instance 
+        // within the PoseDetectionProcessor. In a full implementation, you might 
+        // want to call processor.poseAnalyzer.resetReps()
+        _state.value = PushUpCounterState()
+    }
+}

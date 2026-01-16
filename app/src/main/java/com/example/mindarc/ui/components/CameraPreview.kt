@@ -1,91 +1,83 @@
 package com.example.mindarc.ui.components
 
-import androidx.camera.core.*
-import androidx.camera.lifecycle.ProcessCameraProvider
+import android.util.Log
+import android.util.Size
+import android.view.ViewGroup
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.mindarc.data.processor.PoseDetectionProcessor
+import com.example.mindarc.domain.PoseAnalyzer
+import com.google.mlkit.vision.pose.Pose
 import java.util.concurrent.Executors
 
-/**
- * CameraX preview composable that integrates with ML Kit Pose Detection.
- * Displays camera preview and processes frames for pose detection.
- */
 @Composable
 fun CameraPreview(
     modifier: Modifier = Modifier,
-    onPoseDetected: (Float?) -> Unit
+    onPoseDetected: (PoseAnalyzer.PushUpMetrics, Pose?, Size) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     
-    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-    var poseProcessor: PoseDetectionProcessor? by remember { mutableStateOf(null) }
-    
-    AndroidView(
-        factory = { ctx ->
-            val previewView = PreviewView(ctx).apply {
-                scaleType = PreviewView.ScaleType.FILL_CENTER
-            }
-            
-            val executor = ContextCompat.getMainExecutor(ctx)
-            
-            cameraProviderFuture.addListener({
-                val cameraProvider = cameraProviderFuture.get()
-                
-                // Create preview use case
-                val preview = Preview.Builder()
-                    .build()
-                    .also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-                
-                // Create image analysis use case for pose detection
-                val imageAnalysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
-                    .build()
-                
-                val processor = PoseDetectionProcessor(onPoseDetected)
-                imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), processor)
-                poseProcessor = processor
-                
-                // Select camera (prefer front camera for selfie mode)
-                val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-                
-                try {
-                    // Unbind all use cases before rebinding
-                    cameraProvider.unbindAll()
-                    
-                    // Bind use cases to lifecycle
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview,
-                        imageAnalysis
-                    )
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }, executor)
-            
-            previewView
-        },
-        modifier = modifier.fillMaxSize(),
-        update = { }
-    )
-    
-    // Cleanup on dispose
-    DisposableEffect(Unit) {
-        onDispose {
-            poseProcessor?.cleanup()
-            cameraProviderFuture.get().unbindAll()
+    val previewView = remember {
+        PreviewView(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            scaleType = PreviewView.ScaleType.FILL_CENTER
         }
     }
+
+    DisposableEffect(Unit) {
+        val cameraProviderFuture = androidx.camera.lifecycle.ProcessCameraProvider.getInstance(context)
+        
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+            
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(previewView.surfaceProvider)
+            }
+            
+            val imageAnalyzer = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+                .also {
+                    it.setAnalyzer(cameraExecutor, PoseDetectionProcessor(onPoseDetected))
+                }
+            
+            val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+            
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    cameraSelector,
+                    preview,
+                    imageAnalyzer
+                )
+            } catch (e: Exception) {
+                Log.e("CameraPreview", "Use case binding failed", e)
+            }
+        }, ContextCompat.getMainExecutor(context))
+        
+        onDispose {
+            cameraExecutor.shutdown()
+        }
+    }
+
+    AndroidView(
+        factory = { previewView },
+        modifier = modifier
+    )
 }
