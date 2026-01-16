@@ -1,6 +1,7 @@
 package com.example.mindarc.ui.screen
 
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -45,9 +46,20 @@ fun HomeScreen(
     val isInitialized by viewModel.isInitialized.collectAsState()
     val screenTime by viewModel.todayScreenTime.collectAsState()
 
+    // Check for "Display over other apps" permission
+    var hasOverlayPermission by remember { 
+        mutableStateOf(Settings.canDrawOverlays(context)) 
+    }
+
     LaunchedEffect(Unit) {
         viewModel.checkActiveSession()
         viewModel.updateScreenTime()
+    }
+
+    // Update permission status when returning to app
+    DisposableEffect(Unit) {
+        val observer = { hasOverlayPermission = Settings.canDrawOverlays(context) }
+        onDispose { }
     }
 
     Scaffold(
@@ -91,6 +103,22 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.Start
             ) {
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // Permission Warning Card
+                if (!hasOverlayPermission) {
+                    PermissionWarningCard(
+                        title = "Permission Required",
+                        description = "MindArc needs 'Display over other apps' to block restricted apps effectively.",
+                        onGrantClick = {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
 
                 Text(
                     text = "Welcome back!",
@@ -251,6 +279,55 @@ fun HomeScreen(
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun PermissionWarningCard(
+    title: String,
+    description: String,
+    onGrantClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onGrantClick,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Grant Permission", style = MaterialTheme.typography.labelLarge)
             }
         }
     }
