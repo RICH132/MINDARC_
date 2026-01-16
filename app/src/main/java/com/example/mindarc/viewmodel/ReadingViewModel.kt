@@ -51,7 +51,7 @@ class ReadingViewModel(private val repository: MindArcRepository) : ViewModel() 
         }
     }
 
-    fun saveUserProvidedReading(durationMinutes: Int, reflectionText: String) {
+    fun saveUserProvidedReading(durationMinutes: Int, reflection: String, userReadingTitle: String? = null) {
         viewModelScope.launch {
             val points = repository.calculateReadingPoints(durationMinutes)
             val unlockDuration = repository.calculateReadingUnlockDuration(durationMinutes)
@@ -59,17 +59,17 @@ class ReadingViewModel(private val repository: MindArcRepository) : ViewModel() 
                 activityType = ActivityType.READING_USER_PROVIDED,
                 pointsEarned = points,
                 unlockDurationMinutes = unlockDuration,
-                userReadingTitle = "User Provided Reading"
+                userReadingTitle = userReadingTitle ?: "User Provided Reading"
             )
             val activityId = repository.insertActivity(activityRecord)
             repository.createUnlockSession(activityId, unlockDuration)
 
-            val reflection = ReadingReflection(
+            val reflectionObj = ReadingReflection(
                 activityRecordId = activityId,
                 question = "What did you read?",
-                answer = reflectionText
+                answer = reflection
             )
-            repository.insertReflection(reflection)
+            repository.insertReflection(reflectionObj)
             repository.updateProgressAfterActivity(points)
         }
     }

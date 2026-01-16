@@ -16,13 +16,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatCard(
     title: String,
     value: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    gradientColors: List<Color>? = null
+    gradientColors: List<Color>? = null,
+    onClick: (() -> Unit)? = null
 ) {
     val defaultGradient = listOf(
         Color(0xFF2C3E50),
@@ -32,6 +34,8 @@ fun StatCard(
     val cardGradient = gradientColors ?: defaultGradient
     
     Surface(
+        onClick = { onClick?.invoke() },
+        enabled = onClick != null,
         modifier = modifier
             .height(150.dp)
             .fillMaxWidth(),

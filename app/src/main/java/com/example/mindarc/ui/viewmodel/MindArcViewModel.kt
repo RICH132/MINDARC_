@@ -9,6 +9,7 @@ import com.example.mindarc.data.model.RestrictedApp
 import com.example.mindarc.data.model.UnlockSession
 import com.example.mindarc.data.model.UserProgress
 import com.example.mindarc.data.repository.MindArcRepository
+import com.example.mindarc.domain.ScreenTimeManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 
 class MindArcViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MindArcRepository(application)
+    private val screenTimeManager = ScreenTimeManager(application)
 
     private val _restrictedApps = MutableStateFlow<List<RestrictedApp>>(emptyList())
     val restrictedApps: StateFlow<List<RestrictedApp>> = _restrictedApps.asStateFlow()
@@ -29,10 +31,14 @@ class MindArcViewModel(application: Application) : AndroidViewModel(application)
     private val _isInitialized = MutableStateFlow(false)
     val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
 
+    private val _todayScreenTime = MutableStateFlow("0m")
+    val todayScreenTime: StateFlow<String> = _todayScreenTime.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.initializeDefaultData()
             _isInitialized.value = true
+            updateScreenTime()
         }
         
         viewModelScope.launch {
@@ -49,6 +55,15 @@ class MindArcViewModel(application: Application) : AndroidViewModel(application)
 
         viewModelScope.launch {
             checkActiveSession()
+        }
+    }
+
+    fun updateScreenTime() {
+        try {
+            val millis = screenTimeManager.getTodayTotalScreenTime()
+            _todayScreenTime.value = screenTimeManager.formatTime(millis)
+        } catch (e: Exception) {
+            _todayScreenTime.value = "Need Permission"
         }
     }
 

@@ -33,7 +33,7 @@ enum class DarkModePreference {
 
 // State holder for dark mode preference
 class DarkModeState {
-    var preference by mutableStateOf(DarkModePreference.SYSTEM)
+    var preference by mutableStateOf(DarkModePreference.DARK) // Changed default to DARK
 }
 
 val LocalDarkModeState = staticCompositionLocalOf<DarkModeState> { 
@@ -80,9 +80,10 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun MindArcTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    // Force darkTheme to true by default to fulfill the request
+    darkTheme: Boolean = true, 
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = false, // Set to false to use our custom premium palette consistently
+    dynamicColor: Boolean = false, 
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

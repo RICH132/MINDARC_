@@ -1,5 +1,8 @@
 package com.example.mindarc.ui.screen
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -11,6 +14,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -38,6 +43,24 @@ fun UserProvidedReadingScreen(navController: NavController) {
     val context = LocalContext.current
     val repository = MindArcRepository(context)
     val viewModel: ReadingViewModel = viewModel(factory = ReadingViewModelFactory(repository))
+
+    var selectedPdfUri by remember { mutableStateOf<Uri?>(null) }
+    var pdfFileName by remember { mutableStateOf<String?>(null) }
+
+    val pdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        selectedPdfUri = uri
+        uri?.let {
+            val cursor = context.contentResolver.query(it, null, null, null, null)
+            cursor?.use { c ->
+                val nameIndex = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (c.moveToFirst()) {
+                    pdfFileName = c.getString(nameIndex)
+                }
+            }
+        }
+    }
 
     val totalTime = 60 // 1 minute
     var timeLeft by remember { mutableStateOf(totalTime) }
@@ -76,13 +99,43 @@ fun UserProvidedReadingScreen(navController: NavController) {
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text(
-                    text = "Pick up a book, article, or document. Set the timer and immerse yourself in reading.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp),
-                    textAlign = TextAlign.Center
-                )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Pick up a book, article, or document. Set the timer and immerse yourself in reading.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Button(
+                        onClick = { pdfLauncher.launch("application/pdf") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.UploadFile, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (pdfFileName != null) "Change PDF" else "Upload Pages (PDF)")
+                    }
+                    
+                    if (pdfFileName != null) {
+                        Text(
+                            text = "Selected: $pdfFileName",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
@@ -180,7 +233,11 @@ fun UserProvidedReadingScreen(navController: NavController) {
                         Button(
                             onClick = {
                                 val durationMinutes = totalTime / 60
-                                viewModel.saveUserProvidedReading(durationMinutes, reflection)
+                                viewModel.saveUserProvidedReading(
+                                    durationMinutes = durationMinutes, 
+                                    reflection = reflection,
+                                    userReadingTitle = pdfFileName // Use PDF name as title
+                                )
                                 navController.navigate(Screen.Home.route) {
                                     popUpTo(Screen.Home.route) { inclusive = true }
                                 }

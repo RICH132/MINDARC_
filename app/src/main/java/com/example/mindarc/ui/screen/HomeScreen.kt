@@ -1,5 +1,7 @@
 package com.example.mindarc.ui.screen
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -20,6 +22,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,13 +38,16 @@ fun HomeScreen(
     navController: NavController,
     viewModel: MindArcViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val userProgress by viewModel.userProgress.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()
     val restrictedApps by viewModel.restrictedApps.collectAsState()
     val isInitialized by viewModel.isInitialized.collectAsState()
+    val screenTime by viewModel.todayScreenTime.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.checkActiveSession()
+        viewModel.updateScreenTime()
     }
 
     Scaffold(
@@ -129,6 +135,7 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // First Row of Stats
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -157,18 +164,28 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Second Row of Stats
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     StatCard(
-                        title = "Activities",
-                        value = "${userProgress?.totalActivities ?: 0}",
-                        icon = Icons.Default.FitnessCenter,
-                        modifier = Modifier.weight(1f),
+                        title = "Screen Time",
+                        value = screenTime,
+                        icon = Icons.Default.AccessTime,
+                        modifier = Modifier.weight(1f).then(
+                            if (screenTime == "Need Permission") {
+                                Modifier.shadow(4.dp, RoundedCornerShape(16.dp))
+                            } else Modifier
+                        ),
+                        onClick = {
+                            if (screenTime == "Need Permission") {
+                                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                            }
+                        },
                         gradientColors = listOf(
-                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
-                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.05f)
+                            MaterialTheme.colorScheme.info().copy(alpha = 0.12f),
+                            MaterialTheme.colorScheme.info().copy(alpha = 0.05f)
                         )
                     )
                     StatCard(
@@ -238,6 +255,10 @@ fun HomeScreen(
         }
     }
 }
+
+// Helper to provide an 'info' color since it's not standard in Material3
+@Composable
+fun ColorScheme.info(): Color = tertiary
 
 @Composable
 fun ActiveSessionCard(remainingTime: Long) {
