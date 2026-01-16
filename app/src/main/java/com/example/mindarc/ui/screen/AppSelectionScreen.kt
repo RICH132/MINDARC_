@@ -1,11 +1,13 @@
 package com.example.mindarc.ui.screen
 
+import android.graphics.drawable.Drawable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,9 +27,12 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.mindarc.data.model.RestrictedApp
@@ -245,6 +250,15 @@ fun AppListItem(
     isBlocked: Boolean,
     onToggle: (Boolean) -> Unit
 ) {
+    val context = LocalContext.current
+    val appIcon = remember(app.packageName) {
+        try {
+            context.packageManager.getApplicationIcon(app.packageName)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     Surface(
         onClick = { onToggle(!isBlocked) },
         shape = RoundedCornerShape(16.dp),
@@ -268,28 +282,38 @@ fun AppListItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // App Icon Placeholder
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isBlocked) 
-                            MaterialTheme.colorScheme.primary 
-                        else 
-                            MaterialTheme.colorScheme.secondaryContainer
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = app.appName.take(1).uppercase(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (isBlocked) 
-                        MaterialTheme.colorScheme.onPrimary 
-                    else 
-                        MaterialTheme.colorScheme.onSecondaryContainer,
-                    fontWeight = FontWeight.Bold
+            // App Icon
+            if (appIcon != null) {
+                Image(
+                    bitmap = appIcon.toBitmap().asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isBlocked) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.secondaryContainer
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = app.appName.take(1).uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isBlocked) 
+                            MaterialTheme.colorScheme.onPrimary 
+                        else 
+                            MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Column(modifier = Modifier.weight(1f)) {

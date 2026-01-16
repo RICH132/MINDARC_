@@ -14,7 +14,7 @@ class PoseDetectionProcessor(
     private val onPoseDetected: (PoseAnalyzer.PushUpMetrics, Pose?, Size) -> Unit
 ) : ImageAnalysis.Analyzer {
     
-    private val poseAnalyzer = PoseAnalyzer()
+    val poseAnalyzer = PoseAnalyzer()
     
     private val poseDetector: PoseDetector = PoseDetection.getClient(
         AccuratePoseDetectorOptions.Builder()

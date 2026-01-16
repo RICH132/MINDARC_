@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.mindarc.data.processor.PoseDetectionProcessor
 import com.example.mindarc.ui.components.CameraPreview
 import com.example.mindarc.ui.components.PoseOverlay
 import com.example.mindarc.ui.navigation.Screen
@@ -48,6 +49,13 @@ fun PushupsActivityScreen(
     val pushUpState by pushUpCounterViewModel.state.collectAsState()
     var isCompleted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // Hold the processor to call reset on it
+    val processor = remember { 
+        PoseDetectionProcessor { metrics, pose, size ->
+            pushUpCounterViewModel.updateMetrics(metrics, pose, size)
+        }
+    }
     
     val unlockDuration = remember(pushUpState.count) {
         if (pushUpState.count > 0) (pushUpState.count * 15) / 10 else 0
@@ -76,9 +84,8 @@ fun PushupsActivityScreen(
             if (cameraPermissionState.allPermissionsGranted) {
                 CameraPreview(
                     modifier = Modifier.fillMaxSize(),
-                    onPoseDetected = { metrics, pose, size ->
-                        pushUpCounterViewModel.updateMetrics(metrics, pose, size)
-                    }
+                    onPoseDetected = { _, _, _ -> }, // Handled by processor directly
+                    processor = processor
                 )
                 
                 // Skeleton Overlay
@@ -87,7 +94,7 @@ fun PushupsActivityScreen(
                         modifier = Modifier.fillMaxSize(),
                         pose = pushUpState.currentPose,
                         imageSize = pushUpState.imageSize,
-                        metrics = null // We don't need text metrics inside PoseOverlay for now
+                        metrics = null
                     )
                 }
                 
@@ -115,7 +122,7 @@ fun PushupsActivityScreen(
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = when {
-                                pushUpState.formFeedback.contains("Complete", true) -> Color(0xFF4CAF50).copy(alpha = 0.9f)
+                                pushUpState.formFeedback.contains("Good", true) -> Color(0xFF4CAF50).copy(alpha = 0.9f)
                                 !pushUpState.isGoodForm && pushUpState.isDetecting -> Color(0xFFF44336).copy(alpha = 0.9f)
                                 else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
                             },
@@ -194,7 +201,10 @@ fun PushupsActivityScreen(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 IconButton(
-                                    onClick = { pushUpCounterViewModel.resetCount() },
+                                    onClick = { 
+                                        processor.poseAnalyzer.resetReps()
+                                        pushUpCounterViewModel.resetCount() 
+                                    },
                                     modifier = Modifier
                                         .size(56.dp)
                                         .background(Color.White.copy(alpha = 0.2f), CircleShape)

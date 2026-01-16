@@ -23,7 +23,8 @@ import java.util.concurrent.Executors
 @Composable
 fun CameraPreview(
     modifier: Modifier = Modifier,
-    onPoseDetected: (PoseAnalyzer.PushUpMetrics, Pose?, Size) -> Unit
+    onPoseDetected: (PoseAnalyzer.PushUpMetrics, Pose?, Size) -> Unit,
+    processor: PoseDetectionProcessor = remember { PoseDetectionProcessor(onPoseDetected) }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -39,7 +40,7 @@ fun CameraPreview(
         }
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(processor) {
         val cameraProviderFuture = androidx.camera.lifecycle.ProcessCameraProvider.getInstance(context)
         
         cameraProviderFuture.addListener({
@@ -53,7 +54,7 @@ fun CameraPreview(
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also {
-                    it.setAnalyzer(cameraExecutor, PoseDetectionProcessor(onPoseDetected))
+                    it.setAnalyzer(cameraExecutor, processor)
                 }
             
             val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
