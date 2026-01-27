@@ -13,7 +13,6 @@ import com.example.mindarc.data.dao.UnlockSessionDao
 import com.example.mindarc.data.dao.UserProgressDao
 import com.example.mindarc.data.database.MindArcDatabase
 import com.example.mindarc.data.model.ActivityRecord
-import com.example.mindarc.data.model.ActivityType
 import com.example.mindarc.data.model.QuizQuestion
 import com.example.mindarc.data.model.ReadingContent
 import com.example.mindarc.data.model.ReadingReflection
@@ -47,7 +46,7 @@ class MindArcRepository(context: Context) {
     suspend fun updateApp(app: RestrictedApp) = restrictedAppDao.updateApp(app)
     suspend fun deleteApp(packageName: String) = restrictedAppDao.deleteAppByPackageName(packageName)
 
-    suspend fun getInstalledApps(): List<RestrictedApp> {
+    fun getInstalledApps(): List<RestrictedApp> {
         val installedApps = packageManager.getInstalledPackages(0)
         return installedApps
             .mapNotNull { packageInfo ->
@@ -65,25 +64,24 @@ class MindArcRepository(context: Context) {
     }
 
     // Activities
-    fun getAllActivities(): Flow<List<ActivityRecord>> = activityRecordDao.getAllActivities()
     suspend fun insertActivity(activity: ActivityRecord): Long = activityRecordDao.insertActivity(activity)
 
-    suspend fun calculateUnlockDuration(pushups: Int): Int {
+    fun calculateUnlockDuration(pushups: Int): Int {
         // 10 pushups = 15 minutes, scales linearly
         return (pushups * 15) / 10
     }
 
-    suspend fun calculatePoints(pushups: Int): Int {
+    fun calculatePoints(pushups: Int): Int {
         // 1 pushup = 1 point
         return pushups
     }
 
-    suspend fun calculateReadingUnlockDuration(minutes: Int): Int {
+    fun calculateReadingUnlockDuration(minutes: Int): Int {
         // Reading time = unlock time (1:1 ratio)
         return minutes
     }
 
-    suspend fun calculateReadingPoints(minutes: Int): Int {
+    fun calculateReadingPoints(minutes: Int): Int {
         // 1 minute of reading = 2 points
         return minutes * 2
     }
@@ -95,7 +93,6 @@ class MindArcRepository(context: Context) {
 
     // Unlock Sessions
     suspend fun getActiveSession(): UnlockSession? = unlockSessionDao.getActiveSession()
-    fun getAllSessions(): Flow<List<UnlockSession>> = unlockSessionDao.getAllSessions()
     
     suspend fun createUnlockSession(activityRecordId: Long, durationMinutes: Int): UnlockSession {
         val startTime = System.currentTimeMillis()
@@ -135,20 +132,14 @@ class MindArcRepository(context: Context) {
         val progress = userProgressDao.getProgressSync() ?: UserProgress()
         val calendar = Calendar.getInstance()
         val today = calendar.timeInMillis
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
-        calendar.set(Calendar.MILLISECOND, 0)
-        val todayStart = calendar.timeInMillis
 
         val lastActivityDate = progress.lastActivityDate
         val newStreak = if (lastActivityDate != null) {
-            val lastDate = Calendar.getInstance().apply { timeInMillis = lastActivityDate }
             val daysDiff = (today - lastActivityDate) / (1000 * 60 * 60 * 24)
             
-            when {
-                daysDiff == 0L -> progress.currentStreak // Same day
-                daysDiff == 1L -> progress.currentStreak + 1 // Consecutive day
+            when (daysDiff) {
+                0L -> progress.currentStreak // Same day
+                1L -> progress.currentStreak + 1 // Consecutive day
                 else -> 1 // Reset streak
             }
         } else {
@@ -175,16 +166,10 @@ class MindArcRepository(context: Context) {
 
     // Reading Content
     suspend fun getRandomReadingContent(): ReadingContent? = readingContentDao.getRandomContent()
-    suspend fun getReadingContentById(id: Long): ReadingContent? = readingContentDao.getContentById(id)
-    suspend fun insertReadingContent(content: ReadingContent): Long = readingContentDao.insertContent(content)
 
     // Quiz Questions
     suspend fun getQuestionsForContent(contentId: Long, limit: Int = 3): List<QuizQuestion> {
         return quizQuestionDao.getRandomQuestionsForContent(contentId, limit)
-    }
-
-    suspend fun insertQuizQuestions(questions: List<QuizQuestion>) {
-        quizQuestionDao.insertQuestions(questions)
     }
 
     // Initialize default data
