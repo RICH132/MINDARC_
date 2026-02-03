@@ -193,76 +193,145 @@ class MindArcRepository(context: Context) {
                 title = "The Power of Small Habits",
                 content = """
                     Small habits can have a profound impact on our lives. When we commit to doing something small every day, 
-                    we create a compound effect that leads to significant change over time. 
+                    we create a compound effect that leads to significant change over time. The key is consistency. 
+                    It's not about doing something perfectly or for a long time. It's about showing up every day, 
+                    even if it's just for a few minutes.
                     
-                    The key is consistency. It's not about doing something perfectly or for a long time. 
-                    It's about showing up every day, even if it's just for a few minutes.
+                    Research shows that it takes an average of 66 days to form a new habit. But the journey is more 
+                    important than the destination. Each day you practice, you're strengthening the neural pathways 
+                    that make the habit easier to maintain. This biological reinforcement is what eventually turns 
+                    an effortful action into an automatic response.
                     
-                    Research shows that it takes an average of 66 days to form a new habit. 
-                    But the journey is more important than the destination. Each day you practice, 
-                    you're strengthening the neural pathways that make the habit easier to maintain.
+                    Atomic habits, as described by experts, suggest that improvements of just 1% each day lead to 
+                    nearly 37 times better results after one year. This isn't just motivational talk; it's a 
+                    mathematical reality of compound growth. When we break down monumental goals into manageable 
+                    daily actions, we bypass the brain's natural resistance to change, known as homeostasis.
                     
-                    Start small. If you want to read more, start with just 5 minutes a day. 
-                    If you want to exercise, start with just 10 pushups. The size doesn't matter 
-                    as much as the consistency.
+                    Furthermore, environment plays a crucial role in habit formation. If you want to make a habit 
+                    easier, you should design your environment to encourage it. Keep your book on your pillow, 
+                    your running shoes by the door, and your distractions out of reach. By reducing friction, 
+                    you increase the likelihood of actually performing the habit without relying solely on willpower.
                     
-                    Remember, every expert was once a beginner. Every pro was once an amateur. 
-                    The difference is they kept going when others gave up.
+                    The concept of "habit stacking" is another powerful tool. By anchoring a new habit to an 
+                    existing one—like doing five pushups immediately after brushing your teeth—you leverage the 
+                    established neural networks in your brain. This creates a natural trigger that reminds 
+                    you to act without needing a conscious prompt or external reminder.
+                    
+                    Finally, identity-based habits are the most sustainable. Instead of focusing on what you 
+                    want to achieve, focus on who you want to become. Don't just try to read a book; decide 
+                    to become a reader. When your actions align with your identity, they no longer feel 
+                    like chores, but like natural expressions of who you are.
+                    
+                    Remember, every expert was once a beginner. Every pro was once an amateur. The difference 
+                    is they kept going when others gave up. Start small, stay consistent, and trust the process. 
+                    The size of the initial step doesn't matter as much as the direction and the persistence.
                 """.trimIndent(),
-                estimatedReadingTimeMinutes = 3,
+                estimatedReadingTimeMinutes = 4,
                 category = "Self-Improvement"
             ),
             ReadingContent(
                 title = "Digital Wellness in the Modern Age",
                 content = """
-                    In today's hyperconnected world, managing our relationship with technology 
-                    has become more important than ever. Digital wellness isn't about completely 
-                    avoiding technology, but about using it mindfully and intentionally.
+                    In today's hyperconnected world, managing our relationship with technology has become more 
+                    important than ever. Digital wellness isn't about completely avoiding technology, but about 
+                    using it mindfully and intentionally. It's about ensuring that our tools serve us, rather 
+                    than the other way around.
                     
-                    The average person checks their phone over 150 times a day. Many of these 
-                    checks are automatic, driven by habit rather than necessity. This constant 
-                    connectivity can lead to increased stress, decreased focus, and reduced 
-                    quality of sleep.
+                    The average person checks their phone over 150 times a day. Many of these checks are 
+                    automatic, driven by habit rather than necessity. This constant connectivity can lead 
+                    to increased stress, decreased focus, and reduced quality of sleep. Our brains were not 
+                    evolved to handle the infinite scroll and the dopamine loops of modern social media.
                     
-                    The solution isn't to eliminate technology, but to be more intentional about 
-                    when and how we use it. Setting boundaries, taking regular breaks, and 
-                    being present in the moment are all crucial skills for digital wellness.
+                    To deepen our understanding, we should consider the concept of "Digital Minimalism." 
+                    This philosophy suggests that you should focus your online time on a small number of 
+                    carefully selected and optimized activities that strongly support things you value. 
+                    It's not about missing out; it's about choosing what is worth your limited attention.
                     
-                    One effective strategy is to link screen time to productive activities. 
-                    By earning your screen time through exercise or reading, you create a 
-                    positive feedback loop that encourages healthy habits.
+                    Setting boundaries is a crucial skill for digital wellness. This includes designating 
+                    tech-free zones, such as the dining table or the bedroom, and taking regular "digital 
+                    detoxes" to reset your cognitive baseline. Being present in the moment allows us to 
+                    reconnect with our physical surroundings and the people around us without digital interference.
                     
-                    Remember, technology is a tool. Like any tool, it's most effective when 
-                    used with intention and purpose, not as a default escape from boredom.
+                    The impact of blue light on our circadian rhythm is well-documented. Digital wellness 
+                    also involves physical health. Limiting screen exposure at least an hour before bed 
+                    can significantly improve sleep quality. Better sleep leads to improved emotional 
+                    regulation and higher cognitive performance the next day, creating a positive cycle.
+                    
+                    One effective strategy is to link screen time to productive activities. By earning 
+                    your screen time through exercise or reading, you create a positive feedback loop. 
+                    This transforms passive consumption into a reward for active contribution, 
+                    helping to rewire your brain's association with digital entertainment.
+                    
+                    We must also be aware of the "Attention Economy." Platforms are designed to keep us 
+                    engaged for as long as possible because our attention is their primary product. 
+                    By understanding these psychological hooks, we can build defenses against them, 
+                    such as disabling non-essential notifications and choosing tools that respect our focus.
+                    
+                    In conclusion, digital wellness is an ongoing practice of self-awareness. It requires 
+                    us to regularly evaluate our digital habits and make adjustments. Technology is a 
+                    magnificent tool, but like any tool, it's most effective when used with intention 
+                    and purpose, not as a default escape from boredom or discomfort.
                 """.trimIndent(),
-                estimatedReadingTimeMinutes = 4,
+                estimatedReadingTimeMinutes = 8,
                 category = "Wellness"
             ),
             ReadingContent(
                 title = "The Science of Focus",
                 content = """
-                    Focus is not just about willpower—it's a skill that can be developed and 
-                    strengthened over time. Understanding how focus works can help us improve 
-                    our ability to concentrate on what matters.
+                    Focus is not just about willpower—it's a skill that can be developed and strengthened 
+                    over time. Understanding how focus works can help us improve our ability to concentrate 
+                    on what matters. In an age of distraction, the ability to focus is becoming a rare 
+                    and valuable commodity in the professional landscape.
                     
-                    The brain has two main modes: focused mode and diffuse mode. Focused mode 
-                    is when we're actively concentrating on a task. Diffuse mode is when our 
-                    mind wanders and makes connections between different ideas.
+                    The brain has two main modes: focused mode and diffuse mode. Focused mode is when 
+                    we're actively concentrating on a task, utilizing the prefrontal cortex. Diffuse mode 
+                    is when our mind wanders, allowing the "default mode network" to make creative 
+                    connections between seemingly unrelated ideas. Both modes are essential for learning.
                     
-                    Both modes are important. Focused mode helps us learn and solve problems, 
-                    while diffuse mode helps us see the bigger picture and make creative connections.
+                    However, constant distractions can prevent us from entering either mode effectively. 
+                    When we're constantly switching between tasks—a phenomenon known as context switching—we 
+                    incur a "switching cost" that reduces our IQ and productivity. We never give our 
+                    brain a chance to fully engage with the complexity of a single problem.
                     
-                    However, constant distractions can prevent us from entering either mode 
-                    effectively. When we're constantly switching between tasks or checking 
-                    notifications, we never give our brain a chance to fully engage.
+                    Exploring deeper, "Deep Work" is the ability to focus without distraction on a 
+                    cognitively demanding task. It's a superpower in our increasingly fragmented 
+                    economy. Those who can cultivate this skill will thrive, as shallow work—like 
+                    answering emails or attending unnecessary meetings—is easily replaceable and adds less value.
                     
                     To improve focus, we need to create an environment that minimizes distractions. 
-                    This might mean turning off notifications, setting specific times for 
-                    focused work, or using techniques like the Pomodoro method.
+                    This might mean turning off all notifications, setting specific blocks of time 
+                    for focused work, and using techniques like the Pomodoro method to maintain 
+                    intensity. A clear physical workspace often leads to a clearer mental workspace.
                     
-                    Remember, focus is like a muscle. The more you practice, the stronger it gets.
+                    Another critical factor is our physiological state. Hydration, nutrition, and 
+                    movement all influence our cognitive capacity. If you're struggling to focus, 
+                    sometimes the best solution isn't more discipline, but a short walk or a glass 
+                    of water to reset your brain's chemistry and improve blood flow to the brain.
+                    
+                    The role of dopamine in focus is often misunderstood. While dopamine is linked 
+                    to reward, it is also crucial for motivation and attention. Engaging in 
+                    high-dopamine activities like checking social media can deplete our "focus 
+                    reserves," making it harder to concentrate on less stimulating but more 
+                    important tasks later in the day.
+                    
+                    Mindfulness and meditation are scientifically proven to strengthen the neural 
+                    pathways associated with attention. Even five minutes of daily practice can 
+                    increase the density of gray matter in regions of the brain responsible for 
+                    executive function, helping us notice when our mind has wandered and 
+                    gently bringing it back.
+                    
+                    The concept of "Flow," described by psychologists as being "in the zone," is 
+                    the ultimate state of focus. It occurs when the challenge of a task perfectly 
+                    matches our skill level. In this state, self-consciousness vanishes, and time 
+                    seems to disappear. Designing our work to reach this state is the key to peak performance.
+                    
+                    In summary, focus is like a muscle that requires both exercise and recovery. 
+                    We cannot expect to be focused 24/7. By respecting our biological limits, 
+                    optimizing our environment, and practicing concentration, we can reclaim 
+                    our most valuable resource: our attention. It is through focus that we 
+                    achieve our greatest potential and find deepest satisfaction in our work.
                 """.trimIndent(),
-                estimatedReadingTimeMinutes = 5,
+                estimatedReadingTimeMinutes = 12,
                 category = "Productivity"
             )
         )
@@ -270,7 +339,7 @@ class MindArcRepository(context: Context) {
         contents.forEach { content ->
             val contentId = readingContentDao.insertContent(content)
             
-            // Add quiz questions for each content
+            // Add quiz questions for each content (5 questions each)
             when (content.title) {
                 "The Power of Small Habits" -> {
                     quizQuestionDao.insertQuestions(listOf(
@@ -285,21 +354,39 @@ class MindArcRepository(context: Context) {
                         ),
                         QuizQuestion(
                             readingContentId = contentId,
-                            question = "What matters more than the size of a habit?",
-                            correctAnswer = "Consistency",
-                            option1 = "Perfection",
-                            option2 = "Duration",
-                            option3 = "Consistency",
-                            option4 = "Intensity"
+                            question = "What is the improvement percentage per day that leads to 37x results in a year?",
+                            correctAnswer = "1%",
+                            option1 = "1%",
+                            option2 = "5%",
+                            option3 = "10%",
+                            option4 = "0.5%"
                         ),
                         QuizQuestion(
                             readingContentId = contentId,
-                            question = "What is the key to building habits according to the text?",
-                            correctAnswer = "Showing up every day",
-                            option1 = "Doing it perfectly",
-                            option2 = "Showing up every day",
-                            option3 = "Doing it for long periods",
-                            option4 = "Having the right tools"
+                            question = "What is the term for anchoring a new habit to an existing one?",
+                            correctAnswer = "Habit stacking",
+                            option1 = "Habit pairing",
+                            option2 = "Habit stacking",
+                            option3 = "Habit linking",
+                            option4 = "Habit grouping"
+                        ),
+                        QuizQuestion(
+                            readingContentId = contentId,
+                            question = "According to the text, which type of habits are most sustainable?",
+                            correctAnswer = "Identity-based habits",
+                            option1 = "Goal-based habits",
+                            option2 = "Identity-based habits",
+                            option3 = "Reward-based habits",
+                            option4 = "Time-based habits"
+                        ),
+                        QuizQuestion(
+                            readingContentId = contentId,
+                            question = "What is the brain's natural resistance to change called?",
+                            correctAnswer = "Homeostasis",
+                            option1 = "Inertia",
+                            option2 = "Stagnation",
+                            option3 = "Homeostasis",
+                            option4 = "Resistance"
                         )
                     ))
                 }
@@ -316,21 +403,39 @@ class MindArcRepository(context: Context) {
                         ),
                         QuizQuestion(
                             readingContentId = contentId,
+                            question = "What philosophy suggests focusing online time on activities that support your values?",
+                            correctAnswer = "Digital Minimalism",
+                            option1 = "Digital Minimalism",
+                            option2 = "Digital Essentialism",
+                            option3 = "Digital Abstinence",
+                            option4 = "Digital Intentionality"
+                        ),
+                        QuizQuestion(
+                            readingContentId = contentId,
+                            question = "What should you limit at least an hour before bed to improve sleep quality?",
+                            correctAnswer = "Blue light exposure",
+                            option1 = "Caffeine",
+                            option2 = "Blue light exposure",
+                            option3 = "Sugar",
+                            option4 = "Exercise"
+                        ),
+                        QuizQuestion(
+                            readingContentId = contentId,
+                            question = "What is the primary product of platforms in the 'Attention Economy'?",
+                            correctAnswer = "Our attention",
+                            option1 = "Our data",
+                            option2 = "Software",
+                            option3 = "Our attention",
+                            option4 = "Ads"
+                        ),
+                        QuizQuestion(
+                            readingContentId = contentId,
                             question = "What is the recommended approach to technology use?",
                             correctAnswer = "Using it mindfully and intentionally",
                             option1 = "Avoiding it completely",
                             option2 = "Using it mindfully and intentionally",
                             option3 = "Using it as much as possible",
                             option4 = "Only using it for work"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What is technology according to the text?",
-                            correctAnswer = "A tool",
-                            option1 = "A necessity",
-                            option2 = "A distraction",
-                            option3 = "A tool",
-                            option4 = "An addiction"
                         )
                     ))
                 }
@@ -338,30 +443,48 @@ class MindArcRepository(context: Context) {
                     quizQuestionDao.insertQuestions(listOf(
                         QuizQuestion(
                             readingContentId = contentId,
-                            question = "What are the two main modes of the brain mentioned?",
-                            correctAnswer = "Focused mode and diffuse mode",
-                            option1 = "Active mode and passive mode",
-                            option2 = "Focused mode and diffuse mode",
-                            option3 = "Conscious mode and subconscious mode",
-                            option4 = "Work mode and rest mode"
+                            question = "What is the brain's 'default mode network' associated with?",
+                            correctAnswer = "Diffuse mode",
+                            option1 = "Focused mode",
+                            option2 = "Diffuse mode",
+                            option3 = "Sleep mode",
+                            option4 = "Active mode"
                         ),
                         QuizQuestion(
                             readingContentId = contentId,
-                            question = "What is focus compared to in the text?",
-                            correctAnswer = "A muscle",
-                            option1 = "A skill",
-                            option2 = "A muscle",
-                            option3 = "A habit",
-                            option4 = "A tool"
+                            question = "What is the negative effect of constantly switching between tasks?",
+                            correctAnswer = "Switching cost",
+                            option1 = "Switching cost",
+                            option2 = "Focus fatigue",
+                            option3 = "Mental drain",
+                            option4 = "Context loss"
                         ),
                         QuizQuestion(
                             readingContentId = contentId,
-                            question = "What prevents us from entering focused or diffuse mode effectively?",
-                            correctAnswer = "Constant distractions",
-                            option1 = "Lack of willpower",
-                            option2 = "Constant distractions",
-                            option3 = "Too much work",
-                            option4 = "Lack of sleep"
+                            question = "What neurochemical is linked to both reward and attention?",
+                            correctAnswer = "Dopamine",
+                            option1 = "Serotonin",
+                            option2 = "Dopamine",
+                            option3 = "Cortisol",
+                            option4 = "Melatonin"
+                        ),
+                        QuizQuestion(
+                            readingContentId = contentId,
+                            question = "What is the ultimate state of focus where self-consciousness vanishes?",
+                            correctAnswer = "Flow",
+                            option1 = "Zen",
+                            option2 = "Clarity",
+                            option3 = "Flow",
+                            option4 = "Trance"
+                        ),
+                        QuizQuestion(
+                            readingContentId = contentId,
+                            question = "Which brain region is primarily used during focused mode?",
+                            correctAnswer = "Prefrontal cortex",
+                            option1 = "Amygdala",
+                            option2 = "Prefrontal cortex",
+                            option3 = "Cerebellum",
+                            option4 = "Occipital lobe"
                         )
                     ))
                 }
