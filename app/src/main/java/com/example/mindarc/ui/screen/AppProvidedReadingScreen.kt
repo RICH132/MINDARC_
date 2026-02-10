@@ -51,7 +51,9 @@ fun AppProvidedReadingScreen(navController: NavController) {
     var timeLeft by remember { mutableIntStateOf(totalTimeInSeconds) }
     var isTimerRunning by remember { mutableStateOf(false) }
     val isTimerFinished by remember { derivedStateOf { timeLeft <= 0 } }
-    val canTakeQuiz by remember { derivedStateOf { timeLeft <= totalTimeInSeconds * 0.4 } }
+    val requiredReadingTime = (totalTimeInSeconds * 0.4).toInt()
+    val timeRead = totalTimeInSeconds - timeLeft
+    val canTakeQuiz by remember { derivedStateOf { timeRead >= requiredReadingTime } }
 
     var hasLeftApp by remember { mutableStateOf(false) }
     var showFocusPenaltyDialog by remember { mutableStateOf(false) }
@@ -270,7 +272,12 @@ fun AppProvidedReadingScreen(navController: NavController) {
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     ) {
-                        Text(if (canTakeQuiz) "Take Quiz Now" else "Read more to unlock quiz (${(totalTimeInSeconds * 0.4).toInt() - (totalTimeInSeconds - timeLeft)}s left)")
+                        if (canTakeQuiz) {
+                            Text("Take Quiz Now", fontWeight = FontWeight.Bold)
+                        } else {
+                            val secondsRemaining = (requiredReadingTime - timeRead).coerceAtLeast(0)
+                            Text("Read more to unlock quiz (${secondsRemaining}s left)")
+                        }
                     }
                 } else if (!isQuizFinished) {
                     Column(

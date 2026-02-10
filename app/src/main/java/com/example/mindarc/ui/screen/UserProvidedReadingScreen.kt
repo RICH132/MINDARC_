@@ -6,7 +6,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -37,6 +39,7 @@ fun UserProvidedReadingScreen(navController: NavController) {
     val context = LocalContext.current
     val repository = MindArcRepository(context)
     val viewModel: ReadingViewModel = viewModel(factory = ReadingViewModelFactory(repository))
+    val scrollState = rememberScrollState()
 
     var pdfFileName by remember { mutableStateOf<String?>(null) }
 
@@ -86,7 +89,8 @@ fun UserProvidedReadingScreen(navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp),
+                .padding(24.dp)
+                .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
@@ -162,7 +166,7 @@ fun UserProvidedReadingScreen(navController: NavController) {
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(48.dp))
 
             // Timer Circle
             Box(
@@ -170,7 +174,7 @@ fun UserProvidedReadingScreen(navController: NavController) {
                 modifier = Modifier.size(240.dp)
             ) {
                 CircularProgressIndicator(
-                    progress = { if (totalTime > 0) timeLeft.toFloat() / totalTime else 0f },
+                    progress = { if (totalTime > 0) (timeLeft.toFloat() / totalTime).coerceIn(0f, 1f) else 0f },
                     modifier = Modifier.fillMaxSize(),
                     strokeWidth = 12.dp,
                     color = MaterialTheme.colorScheme.primary,
@@ -178,8 +182,9 @@ fun UserProvidedReadingScreen(navController: NavController) {
                 )
                 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val displayTime = timeLeft.coerceAtLeast(0)
                     Text(
-                        text = "${timeLeft / 60}:${(timeLeft % 60).toString().padStart(2, '0')}",
+                        text = "${displayTime / 60}:${(displayTime % 60).toString().padStart(2, '0')}",
                         style = MaterialTheme.typography.displayLarge,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onBackground
@@ -193,7 +198,7 @@ fun UserProvidedReadingScreen(navController: NavController) {
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(48.dp))
 
             if (!isTimerFinished) {
                 Row(
@@ -248,6 +253,7 @@ fun UserProvidedReadingScreen(navController: NavController) {
                             value = reflection,
                             onValueChange = { reflection = it },
                             label = { Text("What did you learn?") },
+                            placeholder = { Text("Type at least 10 characters...") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(160.dp),
@@ -271,7 +277,7 @@ fun UserProvidedReadingScreen(navController: NavController) {
                             },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(16.dp),
-                            enabled = reflection.length > 10,
+                            enabled = reflection.trim().length >= 10,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary
                             )
