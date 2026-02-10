@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,10 +22,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.mindarc.data.model.QuizQuestion
@@ -44,24 +48,67 @@ fun AppProvidedReadingScreen(navController: NavController) {
     val quizQuestions by viewModel.quizQuestions.collectAsState()
 
     val totalTimeInSeconds = (readingContent?.estimatedReadingTimeMinutes ?: 0) * 60
-    var timeLeft by remember { mutableStateOf(totalTimeInSeconds) }
+    var timeLeft by remember { mutableIntStateOf(totalTimeInSeconds) }
     var isTimerRunning by remember { mutableStateOf(false) }
     val isTimerFinished by remember { derivedStateOf { timeLeft <= 0 } }
+    val canTakeQuiz by remember { derivedStateOf { timeLeft <= totalTimeInSeconds * 0.4 } }
 
-    var currentQuestionIndex by remember { mutableStateOf(0) }
+    var hasLeftApp by remember { mutableStateOf(false) }
+    var showFocusPenaltyDialog by remember { mutableStateOf(false) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE && isTimerRunning && !isTimerFinished) {
+                hasLeftApp = true
+                showFocusPenaltyDialog = true
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    var currentQuestionIndex by remember { mutableIntStateOf(0) }
     var selectedAnswer by remember { mutableStateOf<String?>(null) }
-    var score by remember { mutableStateOf(0) }
+    var score by remember { mutableIntStateOf(0) }
     val isQuizFinished by remember { derivedStateOf { currentQuestionIndex >= quizQuestions.size } }
+
+    // Active Recall state
+    val paragraphs = remember(readingContent) { readingContent?.content?.split("\n\n") ?: emptyList() }
+    var visibleParagraphsCount by remember { mutableIntStateOf(1) }
+    var showRecallPrompt by remember { mutableStateOf(false) }
 
     LaunchedEffect(key1 = isTimerRunning, key2 = timeLeft) {
         if (isTimerRunning && timeLeft > 0) {
             delay(1000L)
             timeLeft--
+            
+            // Trigger Active Recall prompts
+            if (timeLeft % 45 == 0 && visibleParagraphsCount < paragraphs.size) {
+                showRecallPrompt = true
+                isTimerRunning = false
+            }
         }
     }
 
     LaunchedEffect(totalTimeInSeconds) {
         timeLeft = totalTimeInSeconds
+    }
+
+    if (showFocusPenaltyDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Focus Penalty") },
+            text = { Text("You left the app while reading. The 'Perfect Score' bonus has been voided for this session.") },
+            confirmButton = {
+                TextButton(onClick = { showFocusPenaltyDialog = false }) {
+                    Text("Understood")
+                }
+            },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null) }
+        )
     }
 
     Scaffold(
@@ -91,7 +138,7 @@ fun AppProvidedReadingScreen(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (readingContent != null) {
-                if (!isTimerRunning && !isTimerFinished) {
+                if (!isTimerRunning && !isTimerFinished && !showRecallPrompt && visibleParagraphsCount == 1) {
                     Spacer(modifier = Modifier.weight(0.5f))
                     Surface(
                         shape = CircleShape,
@@ -109,7 +156,7 @@ fun AppProvidedReadingScreen(navController: NavController) {
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "You'll have ${readingContent!!.estimatedReadingTimeMinutes} minutes to finish this article before the quiz starts.",
+                        text = "You'll have ${readingContent!!.estimatedReadingTimeMinutes} minutes to finish this article. Keep the app open to maintain your focus bonus!",
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -126,7 +173,7 @@ fun AppProvidedReadingScreen(navController: NavController) {
                         Text("Start Reading", fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.weight(1f))
-                } else if (isTimerRunning && !isTimerFinished) {
+                } else if ((isTimerRunning || showRecallPrompt || visibleParagraphsCount > 1) && !isTimerFinished) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -166,14 +213,49 @@ fun AppProvidedReadingScreen(navController: NavController) {
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
-                    Text(
-                        text = readingContent!!.content,
-                        style = MaterialTheme.typography.bodyLarge,
-                        lineHeight = 28.sp,
+                    Column(
                         modifier = Modifier
                             .weight(1f)
                             .verticalScroll(rememberScrollState())
-                    )
+                    ) {
+                        paragraphs.take(visibleParagraphsCount).forEach { para ->
+                            Text(
+                                text = para,
+                                style = MaterialTheme.typography.bodyLarge,
+                                lineHeight = 28.sp,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+                        }
+                        
+                        if (showRecallPrompt) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        "Quick Check: Are you still focused?",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Reflect briefly on the last paragraph before continuing.")
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(
+                                        onClick = {
+                                            showRecallPrompt = false
+                                            isTimerRunning = true
+                                            visibleParagraphsCount++
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Continue Reading")
+                                    }
+                                }
+                            }
+                        }
+                    }
                     
                     Button(
                         onClick = { timeLeft = 0 },
@@ -182,12 +264,13 @@ fun AppProvidedReadingScreen(navController: NavController) {
                             .padding(vertical = 16.dp)
                             .height(56.dp),
                         shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
+                        enabled = canTakeQuiz,
+                        colors = if (canTakeQuiz) ButtonDefaults.buttonColors() else ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     ) {
-                        Text("I'm finished reading early")
+                        Text(if (canTakeQuiz) "Take Quiz Now" else "Read more to unlock quiz (${(totalTimeInSeconds * 0.4).toInt() - (totalTimeInSeconds - timeLeft)}s left)")
                     }
                 } else if (!isQuizFinished) {
                     Column(
@@ -249,16 +332,29 @@ fun AppProvidedReadingScreen(navController: NavController) {
                     }
                     Spacer(modifier = Modifier.height(32.dp))
                     Text("Session Complete!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    
+                    val finalScore = if (hasLeftApp) (score * 0.7).toInt() else score
+                    
                     Text(
-                        "You earned $score points for this reading session.",
+                        "You earned $finalScore points for this reading session.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
+                    
+                    if (hasLeftApp) {
+                        Text(
+                            "Focus Penalty Applied: -30% points for leaving the app.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    
                     Spacer(modifier = Modifier.height(48.dp))
                     Button(
                         onClick = {
-                            viewModel.saveAppProvidedReading(totalTimeInSeconds / 60, score)
+                            viewModel.saveAppProvidedReading(totalTimeInSeconds / 60, finalScore)
                             navController.navigate(Screen.Home.route) {
                                 popUpTo(Screen.Home.route) { inclusive = true }
                             }
