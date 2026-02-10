@@ -126,7 +126,7 @@ class MindArcViewModel(application: Application) : AndroidViewModel(application)
         )
         
         val activityId = repository.insertActivity(activity)
-        repository.updateProgressAfterActivity(points)
+        repository.updateProgressAfterActivity(activity)
         
         val session = repository.createUnlockSession(activityId, unlockDuration)
         _activeSession.value = session
@@ -153,7 +153,7 @@ class MindArcViewModel(application: Application) : AndroidViewModel(application)
         )
         
         val activityId = repository.insertActivity(activity)
-        repository.updateProgressAfterActivity(points)
+        repository.updateProgressAfterActivity(activity)
         
         val session = repository.createUnlockSession(activityId, unlockDuration)
         _activeSession.value = session

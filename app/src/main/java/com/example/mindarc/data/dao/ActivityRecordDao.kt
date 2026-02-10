@@ -27,5 +27,7 @@ interface ActivityRecordDao {
 
     @Query("SELECT SUM(pointsEarned) FROM activity_records WHERE completedAt >= :startTime AND completedAt <= :endTime")
     suspend fun getPointsInRange(startTime: Long, endTime: Long): Int?
-}
 
+    @Query("SELECT DISTINCT readingContentId FROM activity_records WHERE readingContentId IS NOT NULL")
+    suspend fun getUniqueCategoriesCompleted(): List<Long>
+}

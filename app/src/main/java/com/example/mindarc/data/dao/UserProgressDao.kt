@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.example.mindarc.data.model.Badge
 import com.example.mindarc.data.model.UserProgress
 import kotlinx.coroutines.flow.Flow
 
@@ -21,5 +22,7 @@ interface UserProgressDao {
 
     @Update
     suspend fun updateProgress(progress: UserProgress)
-}
 
+    @Query("UPDATE user_progress SET earnedBadges = earnedBadges || :badge WHERE id = 1")
+    suspend fun addBadge(badge: Badge)
+}

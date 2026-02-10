@@ -3,6 +3,7 @@ package com.example.mindarc.data.repository
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.room.Room
 import com.example.mindarc.data.dao.ActivityRecordDao
 import com.example.mindarc.data.dao.QuizQuestionDao
@@ -13,6 +14,8 @@ import com.example.mindarc.data.dao.UnlockSessionDao
 import com.example.mindarc.data.dao.UserProgressDao
 import com.example.mindarc.data.database.MindArcDatabase
 import com.example.mindarc.data.model.ActivityRecord
+import com.example.mindarc.data.model.ActivityType
+import com.example.mindarc.data.model.Badge
 import com.example.mindarc.data.model.QuizQuestion
 import com.example.mindarc.data.model.ReadingContent
 import com.example.mindarc.data.model.ReadingReflection
@@ -22,6 +25,7 @@ import com.example.mindarc.data.model.UserProgress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
+import java.util.concurrent.TimeUnit
 
 class MindArcRepository(context: Context) {
     private val database: MindArcDatabase = Room.databaseBuilder(
@@ -76,14 +80,36 @@ class MindArcRepository(context: Context) {
         return pushups
     }
 
-    fun calculateReadingUnlockDuration(minutes: Int): Int {
-        // Reading time = unlock time (1:1 ratio)
-        return minutes
+    fun calculateReadingUnlockDuration(minutes: Int, isPerfectScore: Boolean = false): Int {
+        return if (isPerfectScore) {
+            // 25% Focus Bonus
+            (minutes * 1.25).toInt()
+        } else {
+            minutes
+        }
     }
 
-    fun calculateReadingPoints(minutes: Int): Int {
-        // 1 minute of reading = 2 points
-        return minutes * 2
+    suspend fun calculateReadingPoints(minutes: Int, isPerfectScore: Boolean = false): Int {
+        var basePoints = minutes * 2
+        if (isPerfectScore) {
+            basePoints *= 2
+        }
+        val progress = userProgressDao.getProgressSync() ?: UserProgress()
+        if (System.currentTimeMillis() < progress.multiplierEndTime) {
+            basePoints = (basePoints * 1.5).toInt()
+        }
+
+        return basePoints
+    }
+
+    fun getUserLevelTitle(points: Int): String {
+        return when {
+            points >= 3000 -> "Zen Grandmaster"
+            points >= 1500 -> "Mindfulness Master"
+            points >= 500 -> "Scholar"
+            points >= 100 -> "Apprentice"
+            else -> "Novice"
+        }
     }
 
     // Reading Reflections
@@ -128,33 +154,72 @@ class MindArcRepository(context: Context) {
         userProgressDao.updateProgress(progress)
     }
 
-    suspend fun updateProgressAfterActivity(points: Int) {
-        val progress = userProgressDao.getProgressSync() ?: UserProgress()
-        val calendar = Calendar.getInstance()
-        val today = calendar.timeInMillis
+    suspend fun updateProgressAfterActivity(
+    activity: ActivityRecord,
+    actualReadingTime: Int? = null
+) {
+    val progress = getProgressSync() ?: UserProgress()
+    var points = activity.pointsEarned
+    var newPerfectScoreStreak = progress.perfectScoreStreak
+    var newMultiplierEndTime = progress.multiplierEndTime
 
-        val lastActivityDate = progress.lastActivityDate
-        val newStreak = if (lastActivityDate != null) {
-            val daysDiff = (today - lastActivityDate) / (1000 * 60 * 60 * 24)
-            
-            when (daysDiff) {
-                0L -> progress.currentStreak // Same day
-                1L -> progress.currentStreak + 1 // Consecutive day
-                else -> 1 // Reset streak
+    if (activity.activityType == ActivityType.READING_APP_PROVIDED) {
+        val isPerfectScore = activity.pointsEarned > 0 && quizQuestionDao.getQuestionsForContent(activity.readingContentId!!).all { it.correctAnswer == it.userAnswer }
+
+        points = calculateReadingPoints(activity.unlockDurationMinutes, isPerfectScore)
+
+        if (isPerfectScore) {
+            newPerfectScoreStreak++
+            if (newPerfectScoreStreak >= 3) {
+                newMultiplierEndTime = System.currentTimeMillis() + TimeUnit.HOURS.toMillis(24)
+                Log.i("MindArcProgress", "SCHOLAR'S STREAK! 1.5x points for 24 hours.")
             }
         } else {
-            1 // First activity
+            newPerfectScoreStreak = 0
         }
 
-        val updatedProgress = progress.copy(
-            totalPoints = progress.totalPoints + points,
-            currentStreak = newStreak,
-            longestStreak = maxOf(progress.longestStreak, newStreak),
-            lastActivityDate = today,
-            totalActivities = progress.totalActivities + 1
-        )
-        userProgressDao.updateProgress(updatedProgress)
+        // Badge checking
+        if (progress.totalActivities == 0) {
+            userProgressDao.addBadge(Badge.FIRST_EDITION)
+            Log.i("MindArcProgress", "BADGE EARNED: First Edition")
+        }
+
+        actualReadingTime?.let {
+            if (isPerfectScore && activity.unlockDurationMinutes >= 12 && it < 15) {
+                userProgressDao.addBadge(Badge.SPEED_READER)
+                Log.i("MindArcProgress", "BADGE EARNED: Speed Reader")
+            }
+        }
+
+        val uniqueCategories = activityRecordDao.getUniqueCategoriesCompleted()
+        if (uniqueCategories.size >= 3) {
+            userProgressDao.addBadge(Badge.POLYMATH)
+            Log.i("MindArcProgress", "BADGE EARNED: Polymath")
+        }
     }
+
+    val oldTotalPoints = progress.totalPoints
+    val newTotalPoints = oldTotalPoints + points
+
+    val oldLevel = getUserLevelTitle(oldTotalPoints)
+    val newLevel = getUserLevelTitle(newTotalPoints)
+
+    if (oldLevel != newLevel) {
+        Log.i("MindArcProgress", "LEVEL UP! User advanced from $oldLevel to $newLevel")
+    }
+
+    val updatedProgress = progress.copy(
+        totalPoints = newTotalPoints,
+        currentStreak = if (Calendar.getInstance().get(Calendar.DAY_OF_YEAR) != progress.lastActivityDate?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.DAY_OF_YEAR) }) progress.currentStreak + 1 else progress.currentStreak,
+        longestStreak = maxOf(progress.longestStreak, if (Calendar.getInstance().get(Calendar.DAY_OF_YEAR) != progress.lastActivityDate?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.DAY_OF_YEAR) }) progress.currentStreak + 1 else progress.currentStreak),
+        lastActivityDate = System.currentTimeMillis(),
+        totalActivities = progress.totalActivities + 1,
+        perfectScoreStreak = newPerfectScoreStreak,
+        multiplierEndTime = newMultiplierEndTime
+    )
+
+    updateProgress(updatedProgress)
+}
 
     suspend fun updateProgressAfterUnlock() {
         val progress = userProgressDao.getProgressSync() ?: UserProgress()

@@ -47,7 +47,8 @@ class ReadingViewModel(private val repository: MindArcRepository) : ViewModel() 
             )
             val activityId = repository.insertActivity(activityRecord)
             repository.createUnlockSession(activityId, unlockDuration)
-            repository.updateProgressAfterActivity(points)
+            repository.updateProgressAfterActivity(activityRecord)
+            repository.updateProgressAfterUnlock()
         }
     }
 
@@ -70,7 +71,8 @@ class ReadingViewModel(private val repository: MindArcRepository) : ViewModel() 
                 answer = reflection
             )
             repository.insertReflection(reflectionObj)
-            repository.updateProgressAfterActivity(points)
+            repository.updateProgressAfterActivity(activityRecord)
+            repository.updateProgressAfterUnlock()
         }
     }
 }

@@ -12,6 +12,9 @@ data class UserProgress(
     val longestStreak: Int = 0,
     val lastActivityDate: Long? = null,
     val totalActivities: Int = 0,
-    val totalUnlockSessions: Int = 0
+    val totalUnlockSessions: Int = 0,
+    val perfectScoreStreak: Int = 0,
+    val multiplierEndTime: Long = 0,
+    val earnedBadges: Set<Badge> = emptySet(),
+    val completedCategories: Set<String> = emptySet()
 )
-

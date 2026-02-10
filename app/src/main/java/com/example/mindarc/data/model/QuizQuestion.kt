@@ -24,6 +24,6 @@ data class QuizQuestion(
     val option1: String,
     val option2: String,
     val option3: String,
-    val option4: String
+    val option4: String,
+    var userAnswer: String? = null // To be populated by the user
 )
-
