@@ -135,6 +135,26 @@ class MindArcViewModel(application: Application) : AndroidViewModel(application)
         return activityId
     }
 
+    suspend fun completeSquatsActivity(squats: Int): Long {
+        val points = repository.calculatePoints(squats)
+        val unlockDuration = repository.calculateUnlockDuration(squats)
+        
+        val activity = ActivityRecord(
+            activityType = ActivityType.SQUATS,
+            pointsEarned = points,
+            unlockDurationMinutes = unlockDuration
+        )
+        
+        val activityId = repository.insertActivity(activity)
+        repository.updateProgressAfterActivity(activity)
+        
+        val session = repository.createUnlockSession(activityId, unlockDuration)
+        _activeSession.value = session
+        repository.updateProgressAfterUnlock()
+        
+        return activityId
+    }
+
     suspend fun completeReadingActivity(
         activityType: ActivityType,
         readingMinutes: Int,

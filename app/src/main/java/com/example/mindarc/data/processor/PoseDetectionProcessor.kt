@@ -3,6 +3,7 @@ package com.example.mindarc.data.processor
 import android.util.Size
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import com.example.mindarc.data.model.ActivityType
 import com.example.mindarc.domain.PoseAnalyzer
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.pose.Pose
@@ -11,7 +12,8 @@ import com.google.mlkit.vision.pose.PoseDetector
 import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
 
 class PoseDetectionProcessor(
-    private val onPoseDetected: (PoseAnalyzer.PushUpMetrics, Pose?, Size) -> Unit
+    private val activityType: ActivityType = ActivityType.PUSHUPS,
+    private val onPoseDetected: (Any, Pose?, Size) -> Unit
 ) : ImageAnalysis.Analyzer {
     
     val poseAnalyzer = PoseAnalyzer()
@@ -37,22 +39,28 @@ class PoseDetectionProcessor(
             
             poseDetector.process(image)
                 .addOnSuccessListener { pose ->
-                    val metrics = poseAnalyzer.analyzePushUpPose(pose, width, height)
-                    onPoseDetected(metrics, pose, imageSize)
+                    when (activityType) {
+                        ActivityType.PUSHUPS -> {
+                            val metrics = poseAnalyzer.analyzePushUpPose(pose, width, height)
+                            onPoseDetected(metrics, pose, imageSize)
+                        }
+                        ActivityType.SQUATS -> {
+                            val metrics = poseAnalyzer.analyzeSquatPose(pose, width, height)
+                            onPoseDetected(metrics, pose, imageSize)
+                        }
+                        else -> {
+                            // Fallback or other activities
+                        }
+                    }
                 }
                 .addOnFailureListener {
-                    onPoseDetected(
-                        PoseAnalyzer.PushUpMetrics(
-                            elbowAngle = null,
-                            repCount = 0,
-                            depthPercentage = 0,
-                            feedback = "Detection failed",
-                            isHorizontal = false,
-                            confidence = 0f
-                        ),
-                        null,
-                        imageSize
-                    )
+                    // Send empty/error metrics based on activity type
+                    val errorMetrics = when (activityType) {
+                        ActivityType.PUSHUPS -> PoseAnalyzer.PushUpMetrics(null, 0, 0, "Detection failed", false, 0f)
+                        ActivityType.SQUATS -> PoseAnalyzer.SquatMetrics(null, 0, 0, "Detection failed", false, 0f)
+                        else -> Any()
+                    }
+                    onPoseDetected(errorMetrics, null, imageSize)
                 }
                 .addOnCompleteListener {
                     imageProxy.close()
