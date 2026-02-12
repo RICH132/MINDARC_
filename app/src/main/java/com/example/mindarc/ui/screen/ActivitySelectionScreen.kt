@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.mindarc.ui.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,10 +94,25 @@ fun ActivitySelectionScreen(navController: NavController) {
                 title = "AI Pushups",
                 description = "Build physical strength with AI-powered rep counting.",
                 icon = Icons.Filled.FitnessCenter,
-                onClick = { navController.navigate("pushups_activity") },
+                onClick = { navController.navigate(Screen.PushupsActivity.route) },
                 gradientColors = listOf(
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                     MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f)
+                ),
+                rewardText = "1 pt / rep"
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Squats Card
+            ActivityCard(
+                title = "AI Squats",
+                description = "Strengthen your lower body with automated squat detection.",
+                icon = Icons.Filled.DirectionsRun,
+                onClick = { navController.navigate(Screen.SquatsActivity.route) },
+                gradientColors = listOf(
+                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
+                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.06f)
                 ),
                 rewardText = "1 pt / rep"
             )
@@ -107,7 +124,7 @@ fun ActivitySelectionScreen(navController: NavController) {
                 title = "Mindful Reading",
                 description = "Expand your knowledge with curated articles and summaries.",
                 icon = Icons.Filled.MenuBook,
-                onClick = { navController.navigate("reading_activity") },
+                onClick = { navController.navigate(Screen.ReadingActivity.route) },
                 gradientColors = listOf(
                     MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)

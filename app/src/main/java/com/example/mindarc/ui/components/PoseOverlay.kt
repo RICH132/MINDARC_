@@ -8,7 +8,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.nativeCanvas
-import com.example.mindarc.domain.PoseAnalyzer
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 
@@ -17,29 +16,28 @@ fun PoseOverlay(
     modifier: Modifier = Modifier,
     pose: Pose?,
     imageSize: Size,
-    metrics: PoseAnalyzer.PushUpMetrics? = null
+    repCount: Int,
+    depthPercentage: Int,
+    feedback: String
 ) {
     Canvas(modifier = modifier) {
         if (pose == null) return@Canvas
 
         val canvasWidth = size.width
         val canvasHeight = size.height
-        
-        // Use the same aspect ratio logic as CameraPreview (FILL_CENTER)
+
         val scaleX = canvasWidth / imageSize.width
         val scaleY = canvasHeight / imageSize.height
         val scaleFactor = maxOf(scaleX, scaleY)
-        
+
         val dx = (canvasWidth - imageSize.width * scaleFactor) / 2
         val dy = (canvasHeight - imageSize.height * scaleFactor) / 2
 
         fun mapPoint(x: Float, y: Float): Offset {
-             // Mirror X for front camera
-             val flippedX = imageSize.width - x 
+             val flippedX = imageSize.width - x
              return Offset(flippedX * scaleFactor + dx, y * scaleFactor + dy)
         }
 
-        // Draw Skeleton Connections
         val connections = listOf(
             Pair(PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER),
             Pair(PoseLandmark.LEFT_SHOULDER, PoseLandmark.LEFT_ELBOW),
@@ -54,7 +52,7 @@ fun PoseOverlay(
             Pair(PoseLandmark.LEFT_KNEE, PoseLandmark.LEFT_ANKLE),
             Pair(PoseLandmark.RIGHT_KNEE, PoseLandmark.RIGHT_ANKLE)
         )
-        
+
         connections.forEach { (startType, endType) ->
             val start = pose.getPoseLandmark(startType)
             val end = pose.getPoseLandmark(endType)
@@ -67,8 +65,7 @@ fun PoseOverlay(
                 )
             }
         }
-        
-        // Draw Dots
+
         pose.allPoseLandmarks.forEach { landmark ->
             drawCircle(
                 color = if (landmark.inFrameLikelihood > 0.5f) Color.Green else Color.Red.copy(alpha = 0.5f),
@@ -76,31 +73,27 @@ fun PoseOverlay(
                 center = mapPoint(landmark.position.x, landmark.position.y)
             )
         }
-        
-        // Draw metrics overlay
-        if (metrics != null) {
-            drawContext.canvas.nativeCanvas.apply {
-                val paint = Paint().asFrameworkPaint().apply {
-                    color = android.graphics.Color.WHITE
-                    textSize = 48f
-                    isFakeBoldText = true
-                    setShadowLayer(8f, 0f, 0f, android.graphics.Color.BLACK)
+
+        drawContext.canvas.nativeCanvas.apply {
+            val paint = Paint().asFrameworkPaint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 48f
+                isFakeBoldText = true
+                setShadowLayer(8f, 0f, 0f, android.graphics.Color.BLACK)
+            }
+
+            val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
+            if (nose != null) {
+                val pt = mapPoint(nose.position.x, nose.position.y)
+                drawText("Reps: $repCount", pt.x - 100, pt.y - 100, paint)
+                drawText("Depth: $depthPercentage%", pt.x - 100, pt.y - 50, paint)
+
+                val feedbackPaint = Paint().asFrameworkPaint().apply {
+                    color = if (feedback.contains("Good", true)) android.graphics.Color.GREEN else android.graphics.Color.YELLOW
+                    textSize = 40f
+                    setShadowLayer(4f, 0f, 0f, android.graphics.Color.BLACK)
                 }
-                
-                // Draw Rep Counter in top corner or near head
-                val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
-                if (nose != null) {
-                    val pt = mapPoint(nose.position.x, nose.position.y)
-                    drawText("Reps: ${metrics.repCount}", pt.x - 100, pt.y - 100, paint)
-                    drawText("Depth: ${metrics.depthPercentage}%", pt.x - 100, pt.y - 50, paint)
-                    
-                    val feedbackPaint = Paint().asFrameworkPaint().apply {
-                        color = if (metrics.feedback.contains("Good")) android.graphics.Color.GREEN else android.graphics.Color.YELLOW
-                        textSize = 40f
-                        setShadowLayer(4f, 0f, 0f, android.graphics.Color.BLACK)
-                    }
-                    drawText(metrics.feedback, pt.x - 100, pt.y - 150, feedbackPaint)
-                }
+                drawText(feedback, pt.x - 100, pt.y - 150, feedbackPaint)
             }
         }
     }

@@ -31,43 +31,43 @@ import com.example.mindarc.ui.components.PermissionRequestUI
 import com.example.mindarc.ui.components.PoseOverlay
 import com.example.mindarc.ui.navigation.Screen
 import com.example.mindarc.ui.viewmodel.MindArcViewModel
-import com.example.mindarc.ui.viewmodel.PushUpCounterViewModel
+import com.example.mindarc.ui.viewmodel.SquatCounterViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
-fun PushupsActivityScreen(
+fun SquatsActivityScreen(
     navController: NavController,
     mindArcViewModel: MindArcViewModel = viewModel(),
-    pushUpCounterViewModel: PushUpCounterViewModel = viewModel()
+    squatCounterViewModel: SquatCounterViewModel = viewModel()
 ) {
     val cameraPermissionState = rememberMultiplePermissionsState(
         permissions = listOf(android.Manifest.permission.CAMERA)
     )
-    
-    val pushUpState by pushUpCounterViewModel.state.collectAsState()
+
+    val squatState by squatCounterViewModel.state.collectAsState()
     var isCompleted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val processor = remember {
-        PoseDetectionProcessor(ActivityType.PUSHUPS) { metrics, pose, size ->
-            if (metrics is PoseAnalyzer.PushUpMetrics) {
-                pushUpCounterViewModel.updateMetrics(metrics, pose, size)
+        PoseDetectionProcessor(ActivityType.SQUATS) { metrics, pose, size ->
+            if (metrics is PoseAnalyzer.SquatMetrics) {
+                squatCounterViewModel.updateMetrics(metrics, pose, size)
             }
         }
     }
-    
-    val unlockDuration = remember(pushUpState.count) {
-        if (pushUpState.count > 0) (pushUpState.count * 15) / 10 else 0
+
+    val unlockDuration = remember(squatState.count) {
+        if (squatState.count > 0) (squatState.count * 15) / 10 else 0
     }
-    val points = remember(pushUpState.count) { pushUpState.count }
-    
+    val points = remember(squatState.count) { squatState.count }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("AI Pushup Counter", fontWeight = FontWeight.Bold) },
+                title = { Text("AI Squat Counter", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -87,23 +87,23 @@ fun PushupsActivityScreen(
                     modifier = Modifier.fillMaxSize(),
                     processor = processor
                 )
-                
-                if (pushUpState.imageSize.width > 0) {
+
+                if (squatState.imageSize.width > 0) {
                     PoseOverlay(
                         modifier = Modifier.fillMaxSize(),
-                        pose = pushUpState.currentPose,
-                        imageSize = pushUpState.imageSize,
-                        repCount = pushUpState.count,
-                        depthPercentage = pushUpState.depthPercentage,
-                        feedback = pushUpState.formFeedback
+                        pose = squatState.currentPose,
+                        imageSize = squatState.imageSize,
+                        repCount = squatState.count,
+                        depthPercentage = squatState.depthPercentage,
+                        feedback = squatState.formFeedback
                     )
                 }
-                
-                PushupGuideOverlay()
+
+                SquatGuideOverlay()
             } else {
                 PermissionRequestUI(onGrant = { cameraPermissionState.launchMultiplePermissionRequest() })
             }
-            
+
             if (cameraPermissionState.allPermissionsGranted && !isCompleted) {
                 Column(
                     modifier = Modifier
@@ -113,21 +113,21 @@ fun PushupsActivityScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     AnimatedVisibility(
-                        visible = pushUpState.formFeedback.isNotEmpty(),
+                        visible = squatState.formFeedback.isNotEmpty(),
                         enter = fadeIn() + slideInVertically(),
                         exit = fadeOut() + slideOutVertically()
                     ) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = when {
-                                pushUpState.formFeedback.contains("Good", true) -> Color(0xFF4CAF50).copy(alpha = 0.9f)
-                                !pushUpState.isGoodForm && pushUpState.isDetecting -> Color(0xFFF44336).copy(alpha = 0.9f)
+                                squatState.formFeedback.contains("Good", true) -> Color(0xFF4CAF50).copy(alpha = 0.9f)
+                                !squatState.isGoodForm && squatState.isDetecting -> Color(0xFFF44336).copy(alpha = 0.9f)
                                 else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
                             },
                             modifier = Modifier.padding(bottom = 16.dp)
                         ) {
                             Text(
-                                text = pushUpState.formFeedback.uppercase(),
+                                text = squatState.formFeedback.uppercase(),
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = Color.White,
@@ -141,14 +141,14 @@ fun PushupsActivityScreen(
                         shape = CircleShape,
                         color = Color.Black.copy(alpha = 0.5f),
                         border = androidx.compose.foundation.BorderStroke(
-                            4.dp, 
-                            if (pushUpState.isGoodForm) MaterialTheme.colorScheme.primary else Color.Gray
+                            4.dp,
+                            if (squatState.isGoodForm) MaterialTheme.colorScheme.primary else Color.Gray
                         )
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "${pushUpState.count}",
+                                    text = "${squatState.count}",
                                     style = MaterialTheme.typography.displayLarge,
                                     fontWeight = FontWeight.Black,
                                     color = Color.White
@@ -162,9 +162,9 @@ fun PushupsActivityScreen(
                             }
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.weight(1f))
-                    
+
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(28.dp),
@@ -189,17 +189,17 @@ fun PushupsActivityScreen(
                                     Text("UNLOCK", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
                                 }
                             }
-                            
+
                             Spacer(modifier = Modifier.height(20.dp))
-                            
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 IconButton(
-                                    onClick = { 
+                                    onClick = {
                                         processor.poseAnalyzer.resetReps()
-                                        pushUpCounterViewModel.resetCount() 
+                                        squatCounterViewModel.resetCount()
                                     },
                                     modifier = Modifier
                                         .size(56.dp)
@@ -207,19 +207,19 @@ fun PushupsActivityScreen(
                                 ) {
                                     Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Color.White)
                                 }
-                                
+
                                 Button(
                                     onClick = {
-                                        if (pushUpState.count > 0) {
+                                        if (squatState.count > 0) {
                                             scope.launch {
-                                                mindArcViewModel.completePushupsActivity(pushUpState.count)
+                                                mindArcViewModel.completeSquatsActivity(squatState.count)
                                                 isCompleted = true
                                             }
                                         }
                                     },
                                     modifier = Modifier.weight(1f).height(56.dp),
                                     shape = RoundedCornerShape(16.dp),
-                                    enabled = pushUpState.count > 0,
+                                    enabled = squatState.count > 0,
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = MaterialTheme.colorScheme.primary,
                                         disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
@@ -234,10 +234,10 @@ fun PushupsActivityScreen(
                     }
                 }
             }
-            
+
             if (isCompleted) {
-                CompletionOverlay(pushUpState.count, points, unlockDuration) {
-                    navController.navigate(Screen.Home.route) { 
+                CompletionOverlay(squatState.count, points, unlockDuration) {
+                    navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Home.route) { inclusive = true }
                     }
                 }
@@ -247,26 +247,26 @@ fun PushupsActivityScreen(
 }
 
 @Composable
-fun PushupGuideOverlay() {
+fun SquatGuideOverlay() {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
-        
+
         val strokeWidth = 2.dp.toPx()
         val pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-        
+
         drawLine(
             color = Color.White.copy(alpha = 0.3f),
-            start = Offset(0f, height * 0.8f),
-            end = Offset(width, height * 0.8f),
+            start = Offset(0f, height * 0.7f),
+            end = Offset(width, height * 0.7f),
             strokeWidth = strokeWidth,
             pathEffect = pathEffect
         )
-        
+
         drawLine(
             color = Color.White.copy(alpha = 0.3f),
-            start = Offset(0f, height * 0.5f),
-            end = Offset(width, height * 0.5f),
+            start = Offset(width * 0.5f, height * 0.3f),
+            end = Offset(width * 0.5f, height * 0.9f),
             strokeWidth = strokeWidth,
             pathEffect = pathEffect
         )

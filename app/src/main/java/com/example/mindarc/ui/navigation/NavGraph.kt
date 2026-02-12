@@ -12,6 +12,7 @@ import com.example.mindarc.ui.screen.AppSelectionScreen
 import com.example.mindarc.ui.screen.HomeScreen
 import com.example.mindarc.ui.screen.ProgressScreen
 import com.example.mindarc.ui.screen.PushupsActivityScreen
+import com.example.mindarc.ui.screen.SquatsActivityScreen
 import com.example.mindarc.ui.screen.ReadingActivityScreen
 import com.example.mindarc.ui.screen.UserProvidedReadingScreen
 import com.example.mindarc.ui.screen.LockWarningScreen
@@ -21,6 +22,7 @@ sealed class Screen(val route: String) {
     object AppSelection : Screen("app_selection")
     object ActivitySelection : Screen("activity_selection")
     object PushupsActivity : Screen("pushups_activity")
+    object SquatsActivity : Screen("squats_activity")
     object ReadingActivity : Screen("reading_activity")
     object AppProvidedReading : Screen("app_provided_reading")
     object UserProvidedReading : Screen("user_provided_reading")
@@ -47,6 +49,9 @@ fun NavGraph(navController: NavHostController, startDestination: String?) {
         }
         composable(Screen.PushupsActivity.route) {
             PushupsActivityScreen(navController = navController)
+        }
+        composable(Screen.SquatsActivity.route) {
+            SquatsActivityScreen(navController = navController)
         }
         composable(Screen.ReadingActivity.route) {
             ReadingActivityScreen(navController = navController)

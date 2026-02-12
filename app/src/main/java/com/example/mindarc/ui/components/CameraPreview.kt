@@ -1,7 +1,6 @@
 package com.example.mindarc.ui.components
 
 import android.util.Log
-import android.util.Size
 import android.view.ViewGroup
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -12,19 +11,16 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.mindarc.data.processor.PoseDetectionProcessor
-import com.example.mindarc.domain.PoseAnalyzer
-import com.google.mlkit.vision.pose.Pose
 import java.util.concurrent.Executors
 
 @Composable
 fun CameraPreview(
     modifier: Modifier = Modifier,
-    onPoseDetected: (PoseAnalyzer.PushUpMetrics, Pose?, Size) -> Unit,
-    processor: PoseDetectionProcessor = remember { PoseDetectionProcessor(onPoseDetected) }
+    processor: PoseDetectionProcessor
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -71,7 +67,7 @@ fun CameraPreview(
                 Log.e("CameraPreview", "Use case binding failed", e)
             }
         }, ContextCompat.getMainExecutor(context))
-        
+
         onDispose {
             cameraExecutor.shutdown()
         }
