@@ -62,7 +62,7 @@ MindArc is a digital wellbeing Android app that helps you build healthier screen
 
 1. **Clone**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/MindArc.git
+   git clone https://github.com/RICH132/MINDARC_.git
    cd MindArc
    ```
 2. **Open in Android Studio** — File → Open → select the project; let Gradle sync.
