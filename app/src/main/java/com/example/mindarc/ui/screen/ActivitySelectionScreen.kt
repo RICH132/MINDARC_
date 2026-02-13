@@ -10,11 +10,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.DirectionsRun
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,7 +54,7 @@ fun ActivitySelectionScreen(navController: NavController) {
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
-                            Icons.Default.ArrowBack, 
+                            Icons.AutoMirrored.Filled.ArrowBack, 
                             contentDescription = "Back",
                             tint = MaterialTheme.colorScheme.onBackground
                         )
@@ -108,7 +111,7 @@ fun ActivitySelectionScreen(navController: NavController) {
             ActivityCard(
                 title = "AI Squats",
                 description = "Strengthen your lower body with automated squat detection.",
-                icon = Icons.Filled.DirectionsRun,
+                icon = Icons.AutoMirrored.Filled.DirectionsRun,
                 onClick = { navController.navigate(Screen.SquatsActivity.route) },
                 gradientColors = listOf(
                     MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
@@ -123,13 +126,58 @@ fun ActivitySelectionScreen(navController: NavController) {
             ActivityCard(
                 title = "Mindful Reading",
                 description = "Expand your knowledge with curated articles and summaries.",
-                icon = Icons.Filled.MenuBook,
+                icon = Icons.AutoMirrored.Filled.MenuBook,
                 onClick = { navController.navigate(Screen.ReadingActivity.route) },
                 gradientColors = listOf(
                     MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
                 ),
                 rewardText = "2 pts / min"
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Speed-Dial Challenge Card
+            ActivityCard(
+                title = "Speed-Dial Challenge",
+                description = "Call a friend for 5+ minutes instead of texting or scrolling.",
+                icon = Icons.Filled.Phone,
+                onClick = { navController.navigate(Screen.SpeedDialChallenge.route) },
+                gradientColors = listOf(
+                    Color(0xFF00BCD4).copy(alpha = 0.12f),
+                    Color(0xFF009688).copy(alpha = 0.06f)
+                ),
+                rewardText = "10 pts + badge"
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Insta Pong Card
+            ActivityCard(
+                title = "Insta Pong",
+                description = "Beat the bot in a classic Pong game with the Instagram ball.",
+                icon = Icons.Filled.SportsEsports,
+                onClick = { navController.navigate(Screen.PongLevelSelection.route) },
+                gradientColors = listOf(
+                    Color(0xFFDD2A7B).copy(alpha = 0.12f),
+                    Color(0xFF8134AF).copy(alpha = 0.06f)
+                ),
+                rewardText = "5-20 pts"
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Trace-to-Earn Card
+            ActivityCard(
+                title = "Trace-to-Earn",
+                description = "Trace the outline in 60 seconds. Stay close to the line to earn social media time.",
+                icon = Icons.Filled.Brush,
+                onClick = { navController.navigate(Screen.TraceToEarn.route) },
+                gradientColors = listOf(
+                    Color(0xFF8D6E63).copy(alpha = 0.12f),
+                    Color(0xFF5D4037).copy(alpha = 0.06f)
+                ),
+                rewardText = "1-5 min unlock"
             )
             
             Spacer(modifier = Modifier.height(32.dp))

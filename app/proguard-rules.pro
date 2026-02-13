@@ -19,3 +19,15 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Keep data models used by Room / Gson
+-keep class com.example.mindarc.data.model.** { *; }
+
+# Keep Hilt generated classes
+-keep class dagger.hilt.** { *; }
+-keep class *_HiltModules { *; }
+-keep class *_Factory { *; }
+-keep class *_MembersInjector { *; }
+
+# Keep Compose runtime
+-keep class androidx.compose.** { *; }

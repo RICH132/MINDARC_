@@ -20,12 +20,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.example.mindarc.data.repository.MindArcRepository
 import com.example.mindarc.ui.navigation.Screen
 import com.example.mindarc.viewmodel.ReadingViewModel
-import com.example.mindarc.viewmodel.ReadingViewModelFactory
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,8 +31,7 @@ import kotlinx.coroutines.delay
 fun UserProvidedReadingScreen(navController: NavController) {
     var reflection by remember { mutableStateOf("") }
     val context = LocalContext.current
-    val repository = MindArcRepository(context)
-    val viewModel: ReadingViewModel = viewModel(factory = ReadingViewModelFactory(repository))
+    val viewModel: ReadingViewModel = hiltViewModel()
     val scrollState = rememberScrollState()
 
     var pdfFileName by remember { mutableStateOf<String?>(null) }

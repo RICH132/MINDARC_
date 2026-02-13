@@ -1,0 +1,484 @@
+% MindArc Android App — Complete Function Reference
+% Compile with: pdflatex MindArc_App_Functions_Reference.tex (run twice for TOC)
+
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{fancyvrb}
+\usepackage{enumitem}
+
+\geometry{margin=2.5cm}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+
+% Code listing style for Kotlin
+\definecolor{codegreen}{rgb}{0,0.5,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codeblue}{rgb}{0,0,0.7}
+\lstdefinestyle{kotlinstyle}{
+    language=Java,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{codeblue}\bfseries,
+    commentstyle=\color{codegreen},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{codegray},
+    stepnumber=1,
+    numbersep=8pt,
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    tabsize=4,
+    captionpos=b,
+    escapeinside={(*@}{@*)}
+}
+\lstset{style=kotlinstyle}
+
+\title{\textbf{MindArc Android App} \\ Complete Function Reference with Code Snippets}
+\author{MindArc Development}
+\date{\today}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+This document describes all major functions and components of the MindArc Android application. MindArc is a digital wellness app that rewards users with screen-unlock time and points for completing activities such as pushups, squats, reading, voice calls, and mini-games. The app uses pose estimation (ML Kit), an accessibility-based app blocker, and Room/SQLite for persistence. Each section includes function signatures, brief explanations, and relevant code snippets.
+\end{abstract}
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Introduction and Architecture}
+%==============================================================================
+
+\subsection{App Overview}
+MindArc encourages users to earn screen time by completing physical and mental activities:
+\begin{itemize}[noitemsep]
+    \item \textbf{Pushups / Squats} — AI pose detection counts reps and awards points and unlock minutes.
+    \item \textbf{Reading} — App-provided or user-provided reading with optional quiz; rewards scale with time and perfect scores.
+    \item \textbf{Speed-Dial Challenge} — User makes a 5+ minute outgoing call; CallLog verification grants a ``Human Connection'' badge and unlock time.
+    \item \textbf{Insta Pong} — Pong game vs.\ bot (easy/medium/hard) with difficulty-based rewards.
+\end{itemize}
+Restricted apps are blocked by an \texttt{AppBlockingService} (AccessibilityService) until the user has an active unlock session earned through these activities.
+
+\subsection{Package Structure}
+\begin{description}[style=nextline, leftmargin=2.5cm]
+    \item[\texttt{domain}] Pose analysis, screen time (PoseAnalyzer, ScreenTimeManager).
+    \item[\texttt{data}] Repository, DAOs, Room DB, pose processor, models.
+    \item[\texttt{ui}] Screens, ViewModels, navigation, components (camera, overlays).
+    \item[\texttt{service}] App blocking (AccessibilityService), notifications.
+    \item[\texttt{di}] Hilt modules (App, Database, BlockRule).
+    \item[\texttt{utils}] Permissions, notifications.
+\end{description}
+
+%==============================================================================
+\section{Domain Layer}
+%==============================================================================
+
+\subsection{PoseAnalyzer (\texttt{domain/PoseAnalyzer.kt})}
+Analyzes ML Kit \texttt{Pose} to count pushup/squat reps using a 4-phase state machine (UP $\to$ GOING\_DOWN $\to$ AT\_BOTTOM $\to$ GOING\_UP $\to$ UP) with hysteresis thresholds, median filter, and EMA smoothing.
+
+\subsubsection{Data Classes}
+\textbf{PushUpMetrics} — \texttt{elbowAngle}, \texttt{repCount}, \texttt{depthPercentage}, \texttt{feedback}, \texttt{isHorizontal}, \texttt{confidence}. \\
+\textbf{SquatMetrics} — \texttt{kneeAngle}, \texttt{repCount}, \texttt{depthPercentage}, \texttt{feedback}, \texttt{isUpright}, \texttt{confidence}.
+
+\subsubsection{analyzePushUpPose}
+\label{sec:analyzePushUpPose}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+fun analyzePushUpPose(pose: Pose, imageWidth: Int, imageHeight: Int): PushUpMetrics
+\end{lstlisting}
+Uses only upper-body landmarks (shoulder, elbow, wrist). Computes left/right elbow angles (shoulder--elbow--wrist), merges with confidence check, applies median + EMA smoothing, runs the pushup state machine, and returns metrics plus phase-based feedback.
+
+\textbf{Code snippet (angle calculation \& smoothing):}
+\begin{lstlisting}[style=kotlinstyle]
+val leftAngle = if (leftArmConfident) {
+    calculateAngle(leftShoulder, leftElbow, leftWrist)
+} else null
+val rightAngle = if (rightArmConfident) {
+    calculateAngle(rightShoulder, rightElbow, rightWrist)
+} else null
+val rawAngle = when {
+    leftAngle != null && rightAngle != null -> (leftAngle + rightAngle) / 2f
+    leftAngle != null -> leftAngle
+    rightAngle != null -> rightAngle
+    else -> null
+}
+val currentAngle = applySmoothing(rawAngle, pushupAngleBuffer, smoothedPushupAngle)
+if (currentAngle != null) {
+    updatePushupStateMachine(currentAngle, now)
+}
+\end{lstlisting}
+
+\subsubsection{analyzeSquatPose}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+fun analyzeSquatPose(pose: Pose, imageWidth: Int, imageHeight: Int): SquatMetrics
+\end{lstlisting}
+Uses hip, knee, ankle landmarks to compute knee angle (hip--knee--ankle); optional hip-hinge angle for form feedback only. Applies the same smoothing and a 4-phase squat state machine. Form checks (knees caving, forward lean) are informational only and do not block rep counting.
+
+\subsubsection{updatePushupStateMachine / updateSquatStateMachine}
+\textbf{Signatures:}
+\begin{lstlisting}[style=kotlinstyle]
+private fun updatePushupStateMachine(angle: Float, now: Long)
+private fun updateSquatStateMachine(angle: Float, now: Long)
+\end{lstlisting}
+Implement the 4-phase FSM with consecutive-frame confirmation (\texttt{MIN\_FRAMES\_TO\_CONFIRM}), ROM check (\texttt{PUSHUP\_MIN\_ROM} / \texttt{SQUAT\_MIN\_ROM}), and rep cooldown (\texttt{REP\_COOLDOWN\_MS}). On reaching UP again after a full cycle, rep count is incremented if ROM and cooldown pass.
+
+\subsubsection{applySmoothing}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+private fun applySmoothing(
+    rawAngle: Float?,
+    buffer: ArrayDeque<Float>,
+    prevSmoothed: Float?
+): Float?
+\end{lstlisting}
+Applies a median filter over a sliding window (e.g.\ 5 samples), then exponential moving average (\texttt{EMA\_ALPHA}) to reduce noise and spikes.
+
+\textbf{Code snippet:}
+\begin{lstlisting}[style=kotlinstyle]
+buffer.addLast(rawAngle)
+if (buffer.size > MEDIAN_WINDOW) buffer.removeFirst()
+val median = if (buffer.size >= 3) {
+    val sorted = buffer.toList().sorted()
+    sorted[sorted.size / 2]
+} else rawAngle
+return if (prevSmoothed != null) {
+    EMA_ALPHA * median + (1 - EMA_ALPHA) * prevSmoothed
+} else median
+\end{lstlisting}
+
+\subsubsection{calculateAngle}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+private fun calculateAngle(p1: PoseLandmark?, p2: PoseLandmark?, p3: PoseLandmark?): Float?
+\end{lstlisting}
+Computes the 3D angle at vertex \texttt{p2} (p1--p2--p3) using dot product and arccos, returning degrees.
+
+\textbf{Code snippet:}
+\begin{lstlisting}[style=kotlinstyle]
+val v1 = floatArrayOf(p1_3D.x - p2_3D.x, p1_3D.y - p2_3D.y, p1_3D.z - p2_3D.z)
+val v2 = floatArrayOf(p3_3D.x - p2_3D.x, p3_3D.y - p2_3D.y, p3_3D.z - p2_3D.z)
+val dot = v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2]
+// ... magnitudes m1, m2
+return (acos((dot / (m1 * m2)).coerceIn(-1f, 1f)) * 180f / PI).toFloat()
+\end{lstlisting}
+
+\subsubsection{calculateBestSideAngle}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+private fun calculateBestSideAngle(
+    leftP1: PoseLandmark?, leftP2: PoseLandmark?, leftP3: PoseLandmark?,
+    rightP1: PoseLandmark?, rightP2: PoseLandmark?, rightP3: PoseLandmark?
+): Float?
+\end{lstlisting}
+Computes angle for left and right triples if confidence is sufficient; returns average or the single available side.
+
+\subsubsection{resetReps}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+fun resetReps()
+\end{lstlisting}
+Resets all pushup and squat state: rep counts, phase, confirmation counters, buffers, smoothed angles, velocity, last rep time, and min/max angle tracking. Called when starting a new set or after countdown.
+
+%------------------------------------------------------------------------------
+\subsection{ScreenTimeManager (\texttt{domain/ScreenTimeManager.kt})}
+%------------------------------------------------------------------------------
+
+\subsubsection{getTodayTotalScreenTime}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+fun getTodayTotalScreenTime(): Long
+\end{lstlisting}
+Uses \texttt{UsageStatsManager.queryUsageStats(INTERVAL\_DAILY, startOfDay, now)} and sums \texttt{totalTimeInForeground} across all apps. Returns total milliseconds.
+
+\subsubsection{formatTime}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+fun formatTime(millis: Long): String
+\end{lstlisting}
+Converts milliseconds to a human-readable string (e.g.\ \texttt{"2h 30m"} or \texttt{"45m"}).
+
+%==============================================================================
+\section{Data Layer}
+%==============================================================================
+
+\subsection{PoseDetectionProcessor (\texttt{data/processor/PoseDetectionProcessor.kt})}
+Implements \texttt{ImageAnalysis.Analyzer}. Holds a \texttt{PoseDetector} (ML Kit Accurate, stream mode) and a \texttt{PoseAnalyzer} instance.
+
+\subsubsection{Constructor}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+class PoseDetectionProcessor(
+    private val activityType: ActivityType = ActivityType.PUSHUPS,
+    private val onPoseDetected: (Any, Pose?, Size) -> Unit
+) : ImageAnalysis.Analyzer
+\end{lstlisting}
+
+\subsubsection{analyze}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+override fun analyze(imageProxy: ImageProxy)
+\end{lstlisting}
+Builds \texttt{InputImage} from \texttt{imageProxy}, normalizes width/height by rotation, runs \texttt{poseDetector.process(image)}. On success, switches on \texttt{activityType}: for \texttt{PUSHUPS} calls \texttt{poseAnalyzer.analyzePushUpPose}, for \texttt{SQUATS} calls \texttt{poseAnalyzer.analyzeSquatPose}, then invokes \texttt{onPoseDetected(metrics, pose, imageSize)}. Always closes \texttt{imageProxy} in complete/failure.
+
+\subsubsection{cleanup}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+fun cleanup()
+\end{lstlisting}
+Closes the \texttt{PoseDetector}. Called from \texttt{CameraPreview} \texttt{DisposableEffect} \texttt{onDispose}.
+
+%------------------------------------------------------------------------------
+\subsection{MindArcRepository (\texttt{data/repository/MindArcRepository.kt})}
+%------------------------------------------------------------------------------
+Central data access: DAOs for restricted apps, activity records, unlock sessions, user progress, reading content, quiz questions, reflections. All suspend functions run on \texttt{ioDispatcher}.
+
+\subsubsection{Restricted Apps}
+\begin{lstlisting}[style=kotlinstyle]
+fun getAllApps(): Flow<List<RestrictedApp>>
+fun getBlockedApps(): Flow<List<RestrictedApp>>
+suspend fun getAppByPackageName(packageName: String): RestrictedApp?
+suspend fun insertApp(app: RestrictedApp)
+suspend fun updateApp(app: RestrictedApp)
+suspend fun deleteApp(packageName: String)
+suspend fun updateUsage(packageName: String, usage: Long)
+suspend fun resetDailyStats()
+suspend fun getInstalledApps(): List<RestrictedApp>
+\end{lstlisting}
+\texttt{insertApp}, \texttt{updateApp}, \texttt{deleteApp} call \texttt{notifyService()} to broadcast \texttt{ACTION\_RESTRICTIONS\_UPDATED}. \texttt{getInstalledApps} uses \texttt{PackageManager} and \texttt{UsageStatsManager} to build a list of non-system apps with today's usage.
+
+\subsubsection{Activities and Unlock}
+\begin{lstlisting}[style=kotlinstyle]
+fun getAllActivities(): Flow<List<ActivityRecord>>
+suspend fun insertActivity(activity: ActivityRecord): Long
+fun calculateUnlockDuration(pushups: Int): Int   // (pushups * 15) / 10
+fun calculatePoints(pushups: Int): Int           // pushups
+fun calculateReadingUnlockDuration(minutes: Int, isPerfectScore: Boolean): Int
+suspend fun calculateReadingPoints(minutes: Int, isPerfectScore: Boolean): Int
+fun getUserLevelTitle(points: Int): String       // Novice / Apprentice / Scholar / ...
+\end{lstlisting}
+
+\begin{lstlisting}[style=kotlinstyle]
+suspend fun getActiveSession(): UnlockSession?
+fun getAllSessions(): Flow<List<UnlockSession>>
+suspend fun createUnlockSession(activityRecordId: Long, durationMinutes: Int): UnlockSession
+suspend fun checkAndDeactivateExpiredSessions()
+\end{lstlisting}
+\texttt{createUnlockSession} deactivates all existing sessions, then inserts a new \texttt{UnlockSession} with \texttt{startTime}, \texttt{endTime}, \texttt{isActive = true}.
+
+\subsubsection{User Progress and Badges}
+\begin{lstlisting}[style=kotlinstyle]
+fun getProgress(): Flow<UserProgress?>
+suspend fun getProgressSync(): UserProgress?
+suspend fun updateProgress(progress: UserProgress)
+suspend fun updateProgressAfterActivity(points: Int)           // exercise completion
+suspend fun updateProgressAfterActivity(activity: ActivityRecord, actualReadingTime: Int?)
+suspend fun updateProgressAfterUnlock()
+suspend fun awardBadge(badge: Badge)
+\end{lstlisting}
+The reading overload handles perfect-score streaks, 24h multiplier, and badges (First Edition, Speed Reader, Polymath).
+
+\subsubsection{Reading and Quiz}
+\begin{lstlisting}[style=kotlinstyle]
+suspend fun getRandomReadingContent(): ReadingContent?
+suspend fun getReadingContentById(id: Long): ReadingContent?
+suspend fun insertReadingContent(content: ReadingContent): Long
+suspend fun getQuestionsForContent(contentId: Long, limit: Int = 3): List<QuizQuestion>
+suspend fun insertQuizQuestions(questions: List<QuizQuestion>)
+suspend fun insertReflection(reflection: ReadingReflection)
+\end{lstlisting}
+
+\subsubsection{Initialization}
+\begin{lstlisting}[style=kotlinstyle]
+suspend fun initializeDefaultData()
+\end{lstlisting}
+Inserts default \texttt{UserProgress} if missing and seeds default reading content and quiz questions if empty. Private \texttt{initializeDefaultReadingContent()} adds predefined articles and questions.
+
+%------------------------------------------------------------------------------
+\subsection{Data Models (selected)}
+%------------------------------------------------------------------------------
+\textbf{ActivityType} (\texttt{data/model/ActivityType.kt}): \texttt{PUSHUPS}, \texttt{SQUATS}, \texttt{READING\_APP\_PROVIDED}, \texttt{READING\_USER\_PROVIDED}, \texttt{SPEED\_DIAL}, \texttt{PONG\_GAME}.
+
+\textbf{ActivityRecord} (\texttt{data/model/ActivityRecord.kt}): Room entity with \texttt{id}, \texttt{activityType}, \texttt{pointsEarned}, \texttt{unlockDurationMinutes}, \texttt{completedAt}, \texttt{readingContentId}, \texttt{userReadingTitle}.
+
+%==============================================================================
+\section{UI Layer}
+%==============================================================================
+
+\subsection{MindArcViewModel (\texttt{ui/viewmodel/MindArcViewModel.kt})}
+Hilt ViewModel. Exposes \texttt{StateFlow}s: \texttt{restrictedApps}, \texttt{displayedApps}, \texttt{userProgress}, \texttt{activeSession}, \texttt{isInitialized}, \texttt{todayScreenTime}. Init: \texttt{initializeDefaultData()}, \texttt{updateScreenTime()}, collect \texttt{getAllApps()} and \texttt{getProgress()}, and \texttt{checkActiveSession()}.
+
+\subsubsection{App Management}
+\begin{lstlisting}[style=kotlinstyle]
+fun refreshDisplayedApps()
+fun updateScreenTime()
+suspend fun loadInstalledApps(): List<RestrictedApp>
+fun addRestrictedApp(app: RestrictedApp)
+fun removeRestrictedApp(packageName: String)
+fun toggleAppBlocked(app: RestrictedApp)
+fun updateDailyLimit(packageName: String, limitInMillis: Long)
+\end{lstlisting}
+
+\subsubsection{Unlock and Completion}
+\begin{lstlisting}[style=kotlinstyle]
+fun spendPointsToUnlock(points: Int, durationMinutes: Int = 15)
+suspend fun completePushupsActivity(pushups: Int): Long
+suspend fun completeSquatsActivity(squats: Int): Long
+suspend fun completeReadingActivity(activityType, readingMinutes, readingContentId?, userReadingTitle?): Long
+suspend fun completeSpeedDialActivity(callDurationMinutes: Int): Long
+suspend fun completePongActivity(points: Int, unlockMinutes: Int): Long
+suspend fun checkActiveSession()
+fun isAppUnlocked(packageName: String): Boolean
+\end{lstlisting}
+Each \texttt{complete*Activity} builds an \texttt{ActivityRecord}, \texttt{insertActivity}, \texttt{updateProgressAfterActivity} (and \texttt{awardBadge} for Speed-Dial), \texttt{createUnlockSession}, updates \texttt{activeSession}, \texttt{updateProgressAfterUnlock}. \texttt{isAppUnlocked} returns true if there is an active session and current time $<$ \texttt{session.endTime}.
+
+%------------------------------------------------------------------------------
+\subsection{PushUpCounterViewModel / SquatCounterViewModel}
+%------------------------------------------------------------------------------
+Both expose a single \texttt{StateFlow<*CounterState>} with \texttt{count}, \texttt{formFeedback}, \texttt{isDetecting}, \texttt{depthPercentage}, \texttt{isGoodForm}, \texttt{currentPose}, \texttt{imageSize}.
+
+\textbf{PushUpCounterViewModel:}
+\begin{lstlisting}[style=kotlinstyle]
+fun updateMetrics(metrics: PoseAnalyzer.PushUpMetrics, pose: Pose?, size: Size)
+fun resetCount()
+\end{lstlisting}
+\textbf{SquatCounterViewModel:}
+\begin{lstlisting}[style=kotlinstyle]
+fun updateMetrics(metrics: PoseAnalyzer.SquatMetrics, pose: Pose?, size: Size)
+fun resetCount()
+\end{lstlisting}
+\texttt{updateMetrics} copies metrics into \texttt{\_state}; \texttt{resetCount} resets to default state (actual rep count is also reset in \texttt{PoseAnalyzer} via \texttt{processor.poseAnalyzer.resetReps()} from the screen).
+
+%------------------------------------------------------------------------------
+\subsection{NavGraph (\texttt{ui/navigation/NavGraph.kt})}
+%------------------------------------------------------------------------------
+Sealed class \texttt{Screen(route)} defines routes: \texttt{Home}, \texttt{Permissions}, \texttt{AppSelection}, \texttt{ActivitySelection}, \texttt{PushupsActivity}, \texttt{SquatsActivity}, \texttt{ReadingActivity}, \texttt{AppProvidedReading}, \texttt{UserProvidedReading}, \texttt{SpeedDialChallenge}, \texttt{PongLevelSelection}, \texttt{PongGame("\{difficulty\}")}, \texttt{Progress}, \texttt{LockWarning("\{packageName\}")}.
+
+\textbf{NavGraph composable:}
+\begin{lstlisting}[style=kotlinstyle]
+@Composable
+fun NavGraph(navController: NavHostController, startDestination: String)
+\end{lstlisting}
+Builds a \texttt{NavHost} with \texttt{composable()} for each screen; \texttt{PongGame} and \texttt{LockWarning} use \texttt{navArgument} to pass \texttt{difficulty} and \texttt{packageName}.
+
+%------------------------------------------------------------------------------
+\subsection{MainActivity (\texttt{MainActivity.kt})}
+%------------------------------------------------------------------------------
+\textbf{onCreate:} \texttt{enableEdgeToEdge()}; if missing, requests Usage Stats permission; calls \texttt{requestNotificationPermission()} (POST\_NOTIFICATIONS on API 33+). \texttt{setContent} wraps \texttt{MindArcTheme} and \texttt{Surface}; \texttt{startDestination} is \texttt{"home"} if accessibility and overlay permission are granted, else \texttt{"permissions"}. \texttt{NavGraph(navController, startDestination)} is used inside \texttt{Surface}.
+
+\textbf{requestNotificationPermission:} Checks \texttt{POST\_NOTIFICATIONS}; if not granted, launches \texttt{requestPermissionLauncher}.
+
+%------------------------------------------------------------------------------
+\subsection{CameraPreview (\texttt{ui/components/CameraPreview.kt})}
+%------------------------------------------------------------------------------
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+@Composable
+fun CameraPreview(
+    modifier: Modifier = Modifier,
+    processor: PoseDetectionProcessor
+)
+\end{lstlisting}
+Uses \texttt{AndroidView} with a \texttt{PreviewView}. \texttt{DisposableEffect(processor)}: gets \texttt{ProcessCameraProvider}, builds \texttt{Preview} (surface from \texttt{previewView}), \texttt{ImageAnalysis} with \texttt{STRATEGY\_KEEP\_ONLY\_LATEST} and \texttt{processor} as analyzer, \texttt{CameraSelector.DEFAULT\_FRONT\_CAMERA}; binds preview + imageAnalyzer to lifecycle. On dispose: \texttt{processor.cleanup()}, shutdown camera executor.
+
+%------------------------------------------------------------------------------
+\subsection{PoseOverlay (\texttt{ui/components/PoseOverlay.kt})}
+%------------------------------------------------------------------------------
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+@Composable
+fun PoseOverlay(
+    modifier: Modifier = Modifier,
+    pose: Pose?,
+    imageSize: Size,
+    repCount: Int,
+    depthPercentage: Int,
+    feedback: String
+)
+\end{lstlisting}
+\texttt{Canvas}: if \texttt{pose} is null, returns. Computes \texttt{scaleFactor} and offset to map image coordinates to canvas (with horizontal flip). Draws skeleton \texttt{connections} (shoulders, elbows, wrists, hips, knees, ankles) as cyan lines; draws landmarks as green/red circles by confidence. Uses \texttt{nativeCanvas} to draw text: ``Reps: '', ``Depth: \%'', and \texttt{feedback} near the nose landmark.
+
+%------------------------------------------------------------------------------
+\subsection{CommonActivityComponents (\texttt{ui/components/CommonActivityComponents.kt})}
+%------------------------------------------------------------------------------
+\textbf{CompletionOverlay:}
+\begin{lstlisting}[style=kotlinstyle]
+@Composable
+fun CompletionOverlay(count: Int, points: Int, duration: Int, onHome: () -> Unit)
+\end{lstlisting}
+Full-screen dark overlay with a card showing a check icon, ``Incredible Work!'', message (reps, points, unlock duration), and a ``Return Home'' button that calls \texttt{onHome}.
+
+\textbf{PermissionRequestUI:}
+\begin{lstlisting}[style=kotlinstyle]
+@Composable
+fun PermissionRequestUI(onGrant: () -> Unit)
+\end{lstlisting}
+Centered column: camera-off icon, ``Camera Access Needed'', explanation text, ``Enable Camera Access'' button that calls \texttt{onGrant}.
+
+%==============================================================================
+\section{Service Layer}
+%==============================================================================
+
+\subsection{AppBlockingService (\texttt{service/AppBlockingService.kt})}
+Extends \texttt{AccessibilityService}. Injects \texttt{MindArcRepository}. Uses a \texttt{Channel<String>} for foreground package names and a coroutine scope (IO).
+
+\subsubsection{onServiceConnected}
+Registers \texttt{NotificationHelper}, creates notification channel, registers \texttt{BroadcastReceiver} for \texttt{ACTION\_DATE\_CHANGED} to call \texttt{repository.resetDailyStats()}. Collects \texttt{getAllApps()} and re-checks current foreground app; collects \texttt{eventChannel} and calls \texttt{checkAndBlockApp}; runs a loop every 1s: \texttt{updateUsageStats}, \texttt{checkAndBlockApp} for current app, \texttt{checkAndDeactivateExpiredSessions}.
+
+\subsubsection{onAccessibilityEvent}
+On \texttt{TYPE\_WINDOW\_STATE\_CHANGED}, updates usage for previous app, sets \texttt{currentForegroundApp} to \texttt{event.packageName}, sends package name to \texttt{eventChannel}.
+
+\subsubsection{updateUsageStats}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+private fun updateUsageStats(onUpdated: (suspend () -> Unit)? = null)
+\end{lstlisting}
+If there is a \texttt{currentForegroundApp} and \texttt{lastUsageUpdateTime} $> 0$, computes \texttt{usageDuration = now - lastUsageUpdateTime}, then \texttt{repository.updateUsage(app, usageDuration)} and optionally invokes \texttt{onUpdated}. Updates \texttt{lastUsageUpdateTime} to current time.
+
+\subsubsection{checkAndBlockApp}
+\textbf{Signature:}
+\begin{lstlisting}[style=kotlinstyle]
+private suspend fun checkAndBlockApp(packageName: String, apps: List<RestrictedApp>)
+\end{lstlisting}
+Finds the app in \texttt{apps}. If blocked and total usage $\ge$ limit (or in countdown), starts \texttt{BlockActivity} or shows notification / countdown as configured; otherwise allows usage.
+
+%==============================================================================
+\section{Utils}
+%==============================================================================
+
+\subsection{PermissionUtils (\texttt{utils/PermissionUtils.kt})}
+\begin{lstlisting}[style=kotlinstyle]
+fun isAccessibilityServiceEnabled(context: Context): Boolean
+\end{lstlisting}
+Reads \texttt{Settings.Secure.ENABLED\_ACCESSIBILITY\_SERVICES} and checks if the string contains the app's \texttt{AppBlockingService} component name.
+
+\begin{lstlisting}[style=kotlinstyle]
+fun hasUsageStatsPermission(context: Context): Boolean
+fun requestUsageStatsPermission(context: Context)
+\end{lstlisting}
+\texttt{hasUsageStatsPermission} uses \texttt{AppOpsManager.checkOpNoThrow(OPSTR\_GET\_USAGE\_STATS)}; \texttt{requestUsageStatsPermission} starts \texttt{Settings.ACTION\_USAGE\_ACCESS\_SETTINGS}.
+
+%==============================================================================
+\section{Speed-Dial and Pong (Summary)}
+%==============================================================================
+
+\subsection{Speed-Dial Challenge}
+\texttt{SpeedDialChallengeScreen} records \texttt{challengeStartTime} when the user starts the challenge. ``Verify My Call'' queries \texttt{CallLog.Calls.CONTENT\_URI} for outgoing calls after \texttt{challengeStartTime} with duration $\ge$ \texttt{MIN\_CALL\_DURATION\_SECONDS} (5 minutes). On success, \texttt{mindArcViewModel.completeSpeedDialActivity(verifiedCallMinutes)} is called (reward: 10 points, 10 minutes, \texttt{Badge.HUMAN\_CONNECTION}).
+
+\subsection{Pong Game}
+\texttt{PongLevelSelectionScreen} offers Easy / Medium / Hard; navigates to \texttt{PongGame("\{difficulty\}")}. \texttt{PongGameScreen} runs a 60fps game loop with \texttt{withFrameNanos}, canvas-drawn paddles and Instagram-style ball, touch-controlled player paddle, bot AI following the ball. First to 5 points wins; on win, \texttt{mindArcViewModel.completePongActivity(rewardPoints, rewardUnlockMinutes)} is called with difficulty-based rewards.
+
+%==============================================================================
+\section*{Document Info}
+%==============================================================================
+This reference was generated from the MindArc Android codebase. For the latest code, see the project repository. Compile this document with \texttt{pdflatex} (run twice for table of contents).
+
+\end{document}

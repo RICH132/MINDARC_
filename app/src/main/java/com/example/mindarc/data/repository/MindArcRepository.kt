@@ -1,10 +1,11 @@
 package com.example.mindarc.data.repository
 
+import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.util.Log
-import androidx.room.Room
 import com.example.mindarc.data.dao.ActivityRecordDao
 import com.example.mindarc.data.dao.QuizQuestionDao
 import com.example.mindarc.data.dao.ReadingContentDao
@@ -12,7 +13,6 @@ import com.example.mindarc.data.dao.ReadingReflectionDao
 import com.example.mindarc.data.dao.RestrictedAppDao
 import com.example.mindarc.data.dao.UnlockSessionDao
 import com.example.mindarc.data.dao.UserProgressDao
-import com.example.mindarc.data.database.MindArcDatabase
 import com.example.mindarc.data.model.ActivityRecord
 import com.example.mindarc.data.model.ActivityType
 import com.example.mindarc.data.model.Badge
@@ -22,67 +22,134 @@ import com.example.mindarc.data.model.ReadingReflection
 import com.example.mindarc.data.model.RestrictedApp
 import com.example.mindarc.data.model.UnlockSession
 import com.example.mindarc.data.model.UserProgress
+import android.content.SharedPreferences
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class MindArcRepository(context: Context) {
-    private val database: MindArcDatabase = Room.databaseBuilder(
-        context,
-        MindArcDatabase::class.java,
-        "mindarc_database"
-    ).fallbackToDestructiveMigration().build()
-
-    private val restrictedAppDao: RestrictedAppDao = database.restrictedAppDao()
-    private val activityRecordDao: ActivityRecordDao = database.activityRecordDao()
-    private val unlockSessionDao: UnlockSessionDao = database.unlockSessionDao()
-    private val userProgressDao: UserProgressDao = database.userProgressDao()
-    private val readingContentDao: ReadingContentDao = database.readingContentDao()
-    private val quizQuestionDao: QuizQuestionDao = database.quizQuestionDao()
-    private val readingReflectionDao: ReadingReflectionDao = database.readingReflectionDao()
+@Singleton
+class MindArcRepository @Inject constructor(
+    private val restrictedAppDao: RestrictedAppDao,
+    private val activityRecordDao: ActivityRecordDao,
+    private val unlockSessionDao: UnlockSessionDao,
+    private val userProgressDao: UserProgressDao,
+    private val readingContentDao: ReadingContentDao,
+    private val quizQuestionDao: QuizQuestionDao,
+    private val readingReflectionDao: ReadingReflectionDao,
+    @ApplicationContext private val context: Context,
+    private val sharedPreferences: SharedPreferences,
+    private val ioDispatcher: CoroutineDispatcher
+) {
     private val packageManager: PackageManager = context.packageManager
+
+    companion object {
+        const val ACTION_RESTRICTIONS_UPDATED = "com.example.mindarc.service.blocking.RESTRICTIONS_UPDATED"
+        private const val KEY_COMMON_DAILY_LIMIT_MILLIS = "common_daily_limit_millis"
+    }
+
+    /** Common daily time limit (millis) for all blocked apps combined. 0 = no limit. */
+    fun getCommonDailyLimitMillis(): Long = sharedPreferences.getLong(KEY_COMMON_DAILY_LIMIT_MILLIS, 0L)
+
+    suspend fun setCommonDailyLimitMillis(millis: Long) = withContext(ioDispatcher) {
+        sharedPreferences.edit().putLong(KEY_COMMON_DAILY_LIMIT_MILLIS, millis).apply()
+    }
 
     // Restricted Apps
     fun getAllApps(): Flow<List<RestrictedApp>> = restrictedAppDao.getAllApps()
     fun getBlockedApps(): Flow<List<RestrictedApp>> = restrictedAppDao.getBlockedApps()
-    suspend fun insertApp(app: RestrictedApp) = restrictedAppDao.insertApp(app)
-    suspend fun updateApp(app: RestrictedApp) = restrictedAppDao.updateApp(app)
-    suspend fun deleteApp(packageName: String) = restrictedAppDao.deleteAppByPackageName(packageName)
+    suspend fun getAppByPackageName(packageName: String): RestrictedApp? = withContext(ioDispatcher) { restrictedAppDao.getAppByPackageName(packageName) }
+    suspend fun insertApp(app: RestrictedApp) = withContext(ioDispatcher) {
+        restrictedAppDao.insertApp(app)
+        notifyService()
+    }
+    suspend fun updateApp(app: RestrictedApp) = withContext(ioDispatcher) {
+        restrictedAppDao.updateApp(app)
+        notifyService()
+    }
+    suspend fun deleteApp(packageName: String) = withContext(ioDispatcher) {
+        restrictedAppDao.deleteAppByPackageName(packageName)
+        notifyService()
+    }
+    suspend fun updateUsage(packageName: String, usage: Long) = withContext(ioDispatcher) {
+        val app = restrictedAppDao.getAppByPackageName(packageName)
+        app?.let {
+            it.usageTodayInMillis += usage
+            restrictedAppDao.updateApp(it)
+        }
+    }
 
-    fun getInstalledApps(): List<RestrictedApp> {
+    private fun notifyService() {
+        val intent = Intent(ACTION_RESTRICTIONS_UPDATED)
+        context.sendBroadcast(intent)
+    }
+
+    suspend fun resetDailyStats() = withContext(ioDispatcher) {
+        val apps = restrictedAppDao.getAllApps().first()
+        apps.forEach { app ->
+            if (app.usageTodayInMillis > 0 || app.warningSent || app.extraTimePurchased > 0) {
+                val updatedApp = app.copy(
+                    usageTodayInMillis = 0,
+                    extraTimePurchased = 0,
+                    warningSent = false
+                )
+                restrictedAppDao.updateApp(updatedApp)
+            }
+        }
+    }
+
+    suspend fun getInstalledApps(): List<RestrictedApp> = withContext(ioDispatcher) {
+        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val installedApps = packageManager.getInstalledPackages(0)
-        return installedApps
+
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val startTime = calendar.timeInMillis
+        val endTime = System.currentTimeMillis()
+
+        val usageStats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime)
+        val usageByPackage = usageStats?.associateBy({ it.packageName }, { it.totalTimeInForeground }) ?: emptyMap()
+
+        return@withContext installedApps
             .mapNotNull { packageInfo ->
                 packageInfo.applicationInfo
                     ?.takeIf { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
                     ?.let { appInfo ->
                         val appName = packageManager.getApplicationLabel(appInfo).toString()
+                        val usageTime = usageByPackage[appInfo.packageName] ?: 0L
                         RestrictedApp(
                             packageName = packageInfo.packageName,
                             appName = appName,
-                            isBlocked = false
+                            isBlocked = false,
+                            usageTodayInMillis = usageTime
                         )
                     }
             }
     }
 
     // Activities
-    suspend fun insertActivity(activity: ActivityRecord): Long = activityRecordDao.insertActivity(activity)
+    fun getAllActivities(): Flow<List<ActivityRecord>> = activityRecordDao.getAllActivities()
+    suspend fun insertActivity(activity: ActivityRecord): Long = withContext(ioDispatcher) { activityRecordDao.insertActivity(activity) }
 
     fun calculateUnlockDuration(pushups: Int): Int {
-        // 10 pushups = 15 minutes, scales linearly
         return (pushups * 15) / 10
     }
 
     fun calculatePoints(pushups: Int): Int {
-        // 1 pushup = 1 point
         return pushups
     }
 
     fun calculateReadingUnlockDuration(minutes: Int, isPerfectScore: Boolean = false): Int {
         return if (isPerfectScore) {
-            // 25% Focus Bonus
             (minutes * 1.25).toInt()
         } else {
             minutes
@@ -98,7 +165,6 @@ class MindArcRepository(context: Context) {
         if (System.currentTimeMillis() < progress.multiplierEndTime) {
             basePoints = (basePoints * 1.5).toInt()
         }
-
         return basePoints
     }
 
@@ -113,20 +179,18 @@ class MindArcRepository(context: Context) {
     }
 
     // Reading Reflections
-    suspend fun insertReflection(reflection: ReadingReflection) {
+    suspend fun insertReflection(reflection: ReadingReflection) = withContext(ioDispatcher) {
         readingReflectionDao.insertReflection(reflection)
     }
 
     // Unlock Sessions
-    suspend fun getActiveSession(): UnlockSession? = unlockSessionDao.getActiveSession()
-    
-    suspend fun createUnlockSession(activityRecordId: Long, durationMinutes: Int): UnlockSession {
+    suspend fun getActiveSession(): UnlockSession? = withContext(ioDispatcher) { unlockSessionDao.getActiveSession() }
+    fun getAllSessions(): Flow<List<UnlockSession>> = unlockSessionDao.getAllSessions()
+
+    suspend fun createUnlockSession(activityRecordId: Long, durationMinutes: Int): UnlockSession = withContext(ioDispatcher) {
         val startTime = System.currentTimeMillis()
         val endTime = startTime + (durationMinutes * 60 * 1000L)
-        
-        // Deactivate any existing sessions
         unlockSessionDao.deactivateAllSessions()
-        
         val session = UnlockSession(
             activityRecordId = activityRecordId,
             startTime = startTime,
@@ -134,10 +198,10 @@ class MindArcRepository(context: Context) {
             isActive = true
         )
         unlockSessionDao.insertSession(session)
-        return session
+        return@withContext session
     }
 
-    suspend fun checkAndDeactivateExpiredSessions() {
+    suspend fun checkAndDeactivateExpiredSessions() = withContext(ioDispatcher) {
         val activeSession = unlockSessionDao.getActiveSession()
         activeSession?.let {
             if (System.currentTimeMillis() >= it.endTime) {
@@ -148,80 +212,112 @@ class MindArcRepository(context: Context) {
 
     // User Progress
     fun getProgress(): Flow<UserProgress?> = userProgressDao.getProgress()
-    suspend fun getProgressSync(): UserProgress? = userProgressDao.getProgressSync()
+    suspend fun getProgressSync(): UserProgress? = withContext(ioDispatcher) { userProgressDao.getProgressSync() }
 
-    suspend fun updateProgress(progress: UserProgress) {
+    suspend fun updateProgress(progress: UserProgress) = withContext(ioDispatcher) {
         userProgressDao.updateProgress(progress)
     }
 
-    suspend fun updateProgressAfterActivity(
-    activity: ActivityRecord,
-    actualReadingTime: Int? = null
-) {
-    val progress = getProgressSync() ?: UserProgress()
-    var points = activity.pointsEarned
-    var newPerfectScoreStreak = progress.perfectScoreStreak
-    var newMultiplierEndTime = progress.multiplierEndTime
+    // Simple overload for exercise activities (pushups, squats)
+    suspend fun updateProgressAfterActivity(points: Int) = withContext(ioDispatcher) {
+        val progress = userProgressDao.getProgressSync() ?: UserProgress()
+        val calendar = Calendar.getInstance()
+        val today = calendar.timeInMillis
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
 
-    if (activity.activityType == ActivityType.READING_APP_PROVIDED) {
-        val isPerfectScore = activity.pointsEarned > 0 && quizQuestionDao.getQuestionsForContent(activity.readingContentId!!).all { it.correctAnswer == it.userAnswer }
-
-        points = calculateReadingPoints(activity.unlockDurationMinutes, isPerfectScore)
-
-        if (isPerfectScore) {
-            newPerfectScoreStreak++
-            if (newPerfectScoreStreak >= 3) {
-                newMultiplierEndTime = System.currentTimeMillis() + TimeUnit.HOURS.toMillis(24)
-                Log.i("MindArcProgress", "SCHOLAR'S STREAK! 1.5x points for 24 hours.")
+        val lastActivityDate = progress.lastActivityDate
+        val newStreak = if (lastActivityDate != null) {
+            val daysDiff = (today - lastActivityDate) / (1000 * 60 * 60 * 24)
+            when {
+                daysDiff == 0L -> progress.currentStreak
+                daysDiff == 1L -> progress.currentStreak + 1
+                else -> 1
             }
         } else {
-            newPerfectScoreStreak = 0
+            1
         }
 
-        // Badge checking
-        if (progress.totalActivities == 0) {
-            userProgressDao.addBadge(Badge.FIRST_EDITION)
-            Log.i("MindArcProgress", "BADGE EARNED: First Edition")
-        }
+        val updatedProgress = progress.copy(
+            totalPoints = progress.totalPoints + points,
+            currentStreak = newStreak,
+            longestStreak = maxOf(progress.longestStreak, newStreak),
+            lastActivityDate = today,
+            totalActivities = progress.totalActivities + 1
+        )
+        userProgressDao.updateProgress(updatedProgress)
+    }
 
-        actualReadingTime?.let {
-            if (isPerfectScore && activity.unlockDurationMinutes >= 12 && it < 15) {
-                userProgressDao.addBadge(Badge.SPEED_READER)
-                Log.i("MindArcProgress", "BADGE EARNED: Speed Reader")
+    // Rich overload for reading activities with badge/streak logic
+    suspend fun updateProgressAfterActivity(
+        activity: ActivityRecord,
+        actualReadingTime: Int? = null
+    ) = withContext(ioDispatcher) {
+        val progress = getProgressSync() ?: UserProgress()
+        var points = activity.pointsEarned
+        var newPerfectScoreStreak = progress.perfectScoreStreak
+        var newMultiplierEndTime = progress.multiplierEndTime
+
+        if (activity.activityType == ActivityType.READING_APP_PROVIDED) {
+            val isPerfectScore = activity.pointsEarned > 0 && activity.readingContentId != null &&
+                quizQuestionDao.getQuestionsForContent(activity.readingContentId).all { it.correctAnswer == it.userAnswer }
+
+            points = calculateReadingPoints(activity.unlockDurationMinutes, isPerfectScore)
+
+            if (isPerfectScore) {
+                newPerfectScoreStreak++
+                if (newPerfectScoreStreak >= 3) {
+                    newMultiplierEndTime = System.currentTimeMillis() + TimeUnit.HOURS.toMillis(24)
+                    Log.i("MindArcProgress", "SCHOLAR'S STREAK! 1.5x points for 24 hours.")
+                }
+            } else {
+                newPerfectScoreStreak = 0
+            }
+
+            if (progress.totalActivities == 0) {
+                userProgressDao.addBadge(Badge.FIRST_EDITION)
+                Log.i("MindArcProgress", "BADGE EARNED: First Edition")
+            }
+
+            actualReadingTime?.let {
+                if (isPerfectScore && activity.unlockDurationMinutes >= 12 && it < 15) {
+                    userProgressDao.addBadge(Badge.SPEED_READER)
+                    Log.i("MindArcProgress", "BADGE EARNED: Speed Reader")
+                }
+            }
+
+            val uniqueCategories = activityRecordDao.getUniqueCategoriesCompleted()
+            if (uniqueCategories.size >= 3) {
+                userProgressDao.addBadge(Badge.POLYMATH)
+                Log.i("MindArcProgress", "BADGE EARNED: Polymath")
             }
         }
 
-        val uniqueCategories = activityRecordDao.getUniqueCategoriesCompleted()
-        if (uniqueCategories.size >= 3) {
-            userProgressDao.addBadge(Badge.POLYMATH)
-            Log.i("MindArcProgress", "BADGE EARNED: Polymath")
+        val oldTotalPoints = progress.totalPoints
+        val newTotalPoints = oldTotalPoints + points
+
+        val oldLevel = getUserLevelTitle(oldTotalPoints)
+        val newLevel = getUserLevelTitle(newTotalPoints)
+
+        if (oldLevel != newLevel) {
+            Log.i("MindArcProgress", "LEVEL UP! User advanced from $oldLevel to $newLevel")
         }
+
+        val updatedProgress = progress.copy(
+            totalPoints = newTotalPoints,
+            currentStreak = if (Calendar.getInstance().get(Calendar.DAY_OF_YEAR) != progress.lastActivityDate?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.DAY_OF_YEAR) }) progress.currentStreak + 1 else progress.currentStreak,
+            longestStreak = maxOf(progress.longestStreak, if (Calendar.getInstance().get(Calendar.DAY_OF_YEAR) != progress.lastActivityDate?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.DAY_OF_YEAR) }) progress.currentStreak + 1 else progress.currentStreak),
+            lastActivityDate = System.currentTimeMillis(),
+            totalActivities = progress.totalActivities + 1,
+            perfectScoreStreak = newPerfectScoreStreak,
+            multiplierEndTime = newMultiplierEndTime
+        )
+        updateProgress(updatedProgress)
     }
 
-    val oldTotalPoints = progress.totalPoints
-    val newTotalPoints = oldTotalPoints + points
-
-    val oldLevel = getUserLevelTitle(oldTotalPoints)
-    val newLevel = getUserLevelTitle(newTotalPoints)
-
-    if (oldLevel != newLevel) {
-        Log.i("MindArcProgress", "LEVEL UP! User advanced from $oldLevel to $newLevel")
-    }
-
-    val updatedProgress = progress.copy(
-        totalPoints = newTotalPoints,
-        currentStreak = if (Calendar.getInstance().get(Calendar.DAY_OF_YEAR) != progress.lastActivityDate?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.DAY_OF_YEAR) }) progress.currentStreak + 1 else progress.currentStreak,
-        longestStreak = maxOf(progress.longestStreak, if (Calendar.getInstance().get(Calendar.DAY_OF_YEAR) != progress.lastActivityDate?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.DAY_OF_YEAR) }) progress.currentStreak + 1 else progress.currentStreak),
-        lastActivityDate = System.currentTimeMillis(),
-        totalActivities = progress.totalActivities + 1,
-        perfectScoreStreak = newPerfectScoreStreak,
-        multiplierEndTime = newMultiplierEndTime
-    )
-
-    updateProgress(updatedProgress)
-}
-
-    suspend fun updateProgressAfterUnlock() {
+    suspend fun updateProgressAfterUnlock() = withContext(ioDispatcher) {
         val progress = userProgressDao.getProgressSync() ?: UserProgress()
         val updatedProgress = progress.copy(
             totalUnlockSessions = progress.totalUnlockSessions + 1
@@ -229,23 +325,31 @@ class MindArcRepository(context: Context) {
         userProgressDao.updateProgress(updatedProgress)
     }
 
+    // Badges
+    suspend fun awardBadge(badge: Badge) = withContext(ioDispatcher) {
+        userProgressDao.addBadge(badge)
+    }
+
     // Reading Content
-    suspend fun getRandomReadingContent(): ReadingContent? = readingContentDao.getRandomContent()
+    suspend fun getRandomReadingContent(): ReadingContent? = withContext(ioDispatcher) { readingContentDao.getRandomContent() }
+    suspend fun getReadingContentById(id: Long): ReadingContent? = withContext(ioDispatcher) { readingContentDao.getContentById(id) }
+    suspend fun insertReadingContent(content: ReadingContent): Long = withContext(ioDispatcher) { readingContentDao.insertContent(content) }
 
     // Quiz Questions
-    suspend fun getQuestionsForContent(contentId: Long, limit: Int = 3): List<QuizQuestion> {
-        return quizQuestionDao.getRandomQuestionsForContent(contentId, limit)
+    suspend fun getQuestionsForContent(contentId: Long, limit: Int = 3): List<QuizQuestion> = withContext(ioDispatcher) {
+        return@withContext quizQuestionDao.getRandomQuestionsForContent(contentId, limit)
+    }
+
+    suspend fun insertQuizQuestions(questions: List<QuizQuestion>) = withContext(ioDispatcher) {
+        quizQuestionDao.insertQuestions(questions)
     }
 
     // Initialize default data
-    suspend fun initializeDefaultData() {
-        // Initialize user progress if not exists
+    suspend fun initializeDefaultData() = withContext(ioDispatcher) {
         val progress = userProgressDao.getProgressSync()
         if (progress == null) {
             userProgressDao.insertProgress(UserProgress())
         }
-
-        // Initialize default reading content if empty
         val contentCount = readingContentDao.getAllContent().first().size
         if (contentCount == 0) {
             initializeDefaultReadingContent()
@@ -404,153 +508,32 @@ class MindArcRepository(context: Context) {
         contents.forEach { content ->
             val contentId = readingContentDao.insertContent(content)
             
-            // Add quiz questions for each content (5 questions each)
             when (content.title) {
                 "The Power of Small Habits" -> {
                     quizQuestionDao.insertQuestions(listOf(
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "How long does it take on average to form a new habit?",
-                            correctAnswer = "66 days",
-                            option1 = "21 days",
-                            option2 = "66 days",
-                            option3 = "90 days",
-                            option4 = "100 days"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What is the improvement percentage per day that leads to 37x results in a year?",
-                            correctAnswer = "1%",
-                            option1 = "1%",
-                            option2 = "5%",
-                            option3 = "10%",
-                            option4 = "0.5%"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What is the term for anchoring a new habit to an existing one?",
-                            correctAnswer = "Habit stacking",
-                            option1 = "Habit pairing",
-                            option2 = "Habit stacking",
-                            option3 = "Habit linking",
-                            option4 = "Habit grouping"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "According to the text, which type of habits are most sustainable?",
-                            correctAnswer = "Identity-based habits",
-                            option1 = "Goal-based habits",
-                            option2 = "Identity-based habits",
-                            option3 = "Reward-based habits",
-                            option4 = "Time-based habits"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What is the brain's natural resistance to change called?",
-                            correctAnswer = "Homeostasis",
-                            option1 = "Inertia",
-                            option2 = "Stagnation",
-                            option3 = "Homeostasis",
-                            option4 = "Resistance"
-                        )
+                        QuizQuestion(readingContentId = contentId, question = "How long does it take on average to form a new habit?", correctAnswer = "66 days", option1 = "21 days", option2 = "66 days", option3 = "90 days", option4 = "100 days"),
+                        QuizQuestion(readingContentId = contentId, question = "What is the improvement percentage per day that leads to 37x results in a year?", correctAnswer = "1%", option1 = "1%", option2 = "5%", option3 = "10%", option4 = "0.5%"),
+                        QuizQuestion(readingContentId = contentId, question = "What is the term for anchoring a new habit to an existing one?", correctAnswer = "Habit stacking", option1 = "Habit pairing", option2 = "Habit stacking", option3 = "Habit linking", option4 = "Habit grouping"),
+                        QuizQuestion(readingContentId = contentId, question = "According to the text, which type of habits are most sustainable?", correctAnswer = "Identity-based habits", option1 = "Goal-based habits", option2 = "Identity-based habits", option3 = "Reward-based habits", option4 = "Time-based habits"),
+                        QuizQuestion(readingContentId = contentId, question = "What is the brain's natural resistance to change called?", correctAnswer = "Homeostasis", option1 = "Inertia", option2 = "Stagnation", option3 = "Homeostasis", option4 = "Resistance")
                     ))
                 }
                 "Digital Wellness in the Modern Age" -> {
                     quizQuestionDao.insertQuestions(listOf(
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "How many times does the average person check their phone per day?",
-                            correctAnswer = "Over 150 times",
-                            option1 = "50 times",
-                            option2 = "100 times",
-                            option3 = "Over 150 times",
-                            option4 = "200 times"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What philosophy suggests focusing online time on activities that support your values?",
-                            correctAnswer = "Digital Minimalism",
-                            option1 = "Digital Minimalism",
-                            option2 = "Digital Essentialism",
-                            option3 = "Digital Abstinence",
-                            option4 = "Digital Intentionality"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What should you limit at least an hour before bed to improve sleep quality?",
-                            correctAnswer = "Blue light exposure",
-                            option1 = "Caffeine",
-                            option2 = "Blue light exposure",
-                            option3 = "Sugar",
-                            option4 = "Exercise"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What is the primary product of platforms in the 'Attention Economy'?",
-                            correctAnswer = "Our attention",
-                            option1 = "Our data",
-                            option2 = "Software",
-                            option3 = "Our attention",
-                            option4 = "Ads"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What is the recommended approach to technology use?",
-                            correctAnswer = "Using it mindfully and intentionally",
-                            option1 = "Avoiding it completely",
-                            option2 = "Using it mindfully and intentionally",
-                            option3 = "Using it as much as possible",
-                            option4 = "Only using it for work"
-                        )
+                        QuizQuestion(readingContentId = contentId, question = "How many times does the average person check their phone per day?", correctAnswer = "Over 150 times", option1 = "50 times", option2 = "100 times", option3 = "Over 150 times", option4 = "200 times"),
+                        QuizQuestion(readingContentId = contentId, question = "What philosophy suggests focusing online time on activities that support your values?", correctAnswer = "Digital Minimalism", option1 = "Digital Minimalism", option2 = "Digital Essentialism", option3 = "Digital Abstinence", option4 = "Digital Intentionality"),
+                        QuizQuestion(readingContentId = contentId, question = "What should you limit at least an hour before bed to improve sleep quality?", correctAnswer = "Blue light exposure", option1 = "Caffeine", option2 = "Blue light exposure", option3 = "Sugar", option4 = "Exercise"),
+                        QuizQuestion(readingContentId = contentId, question = "What is the primary product of platforms in the 'Attention Economy'?", correctAnswer = "Our attention", option1 = "Our data", option2 = "Software", option3 = "Our attention", option4 = "Ads"),
+                        QuizQuestion(readingContentId = contentId, question = "What is the recommended approach to technology use?", correctAnswer = "Using it mindfully and intentionally", option1 = "Avoiding it completely", option2 = "Using it mindfully and intentionally", option3 = "Using it as much as possible", option4 = "Only using it for work")
                     ))
                 }
                 "The Science of Focus" -> {
                     quizQuestionDao.insertQuestions(listOf(
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What is the brain's 'default mode network' associated with?",
-                            correctAnswer = "Diffuse mode",
-                            option1 = "Focused mode",
-                            option2 = "Diffuse mode",
-                            option3 = "Sleep mode",
-                            option4 = "Active mode"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What is the negative effect of constantly switching between tasks?",
-                            correctAnswer = "Switching cost",
-                            option1 = "Switching cost",
-                            option2 = "Focus fatigue",
-                            option3 = "Mental drain",
-                            option4 = "Context loss"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What neurochemical is linked to both reward and attention?",
-                            correctAnswer = "Dopamine",
-                            option1 = "Serotonin",
-                            option2 = "Dopamine",
-                            option3 = "Cortisol",
-                            option4 = "Melatonin"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "What is the ultimate state of focus where self-consciousness vanishes?",
-                            correctAnswer = "Flow",
-                            option1 = "Zen",
-                            option2 = "Clarity",
-                            option3 = "Flow",
-                            option4 = "Trance"
-                        ),
-                        QuizQuestion(
-                            readingContentId = contentId,
-                            question = "Which brain region is primarily used during focused mode?",
-                            correctAnswer = "Prefrontal cortex",
-                            option1 = "Amygdala",
-                            option2 = "Prefrontal cortex",
-                            option3 = "Cerebellum",
-                            option4 = "Occipital lobe"
-                        )
+                        QuizQuestion(readingContentId = contentId, question = "What is the brain's 'default mode network' associated with?", correctAnswer = "Diffuse mode", option1 = "Focused mode", option2 = "Diffuse mode", option3 = "Sleep mode", option4 = "Active mode"),
+                        QuizQuestion(readingContentId = contentId, question = "What is the negative effect of constantly switching between tasks?", correctAnswer = "Switching cost", option1 = "Switching cost", option2 = "Focus fatigue", option3 = "Mental drain", option4 = "Context loss"),
+                        QuizQuestion(readingContentId = contentId, question = "What neurochemical is linked to both reward and attention?", correctAnswer = "Dopamine", option1 = "Serotonin", option2 = "Dopamine", option3 = "Cortisol", option4 = "Melatonin"),
+                        QuizQuestion(readingContentId = contentId, question = "What is the ultimate state of focus where self-consciousness vanishes?", correctAnswer = "Flow", option1 = "Zen", option2 = "Clarity", option3 = "Flow", option4 = "Trance"),
+                        QuizQuestion(readingContentId = contentId, question = "Which brain region is primarily used during focused mode?", correctAnswer = "Prefrontal cortex", option1 = "Amygdala", option2 = "Prefrontal cortex", option3 = "Cerebellum", option4 = "Occipital lobe")
                     ))
                 }
             }

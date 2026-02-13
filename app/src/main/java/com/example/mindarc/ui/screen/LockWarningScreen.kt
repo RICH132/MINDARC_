@@ -18,7 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.mindarc.ui.navigation.Screen
 import com.example.mindarc.ui.viewmodel.MindArcViewModel
@@ -27,7 +27,7 @@ import com.example.mindarc.ui.viewmodel.MindArcViewModel
 fun LockWarningScreen(
     navController: NavController,
     packageName: String,
-    viewModel: MindArcViewModel = viewModel()
+    viewModel: MindArcViewModel = hiltViewModel()
 ) {
     val userProgress by viewModel.userProgress.collectAsState()
     val activeSession by viewModel.activeSession.collectAsState()

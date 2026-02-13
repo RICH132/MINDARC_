@@ -69,6 +69,7 @@ fun CameraPreview(
         }, ContextCompat.getMainExecutor(context))
 
         onDispose {
+            processor.cleanup()
             cameraExecutor.shutdown()
         }
     }

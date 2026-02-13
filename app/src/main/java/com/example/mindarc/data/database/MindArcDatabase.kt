@@ -28,7 +28,7 @@ import com.example.mindarc.data.model.UserProgress
         QuizQuestion::class,
         ReadingReflection::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

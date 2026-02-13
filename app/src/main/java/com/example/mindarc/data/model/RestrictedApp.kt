@@ -8,7 +8,12 @@ data class RestrictedApp(
     @PrimaryKey
     val packageName: String,
     val appName: String,
-    val isBlocked: Boolean = true,
-    val iconUri: String? = null
+    var isBlocked: Boolean = true,
+    val iconUri: String? = null,
+    var dailyLimitInMillis: Long = 0,
+    var usageTodayInMillis: Long = 0,
+    var extraTimePurchased: Long = 0,
+    var lastUsageTimestamp: Long = 0,
+    var warningSent: Boolean = false
 )
 

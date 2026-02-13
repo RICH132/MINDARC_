@@ -100,6 +100,7 @@ fun MindArcTheme(
     if (!view.isInEditMode) {
         androidx.compose.runtime.SideEffect {
             val window = (view.context as Activity).window
+            @Suppress("DEPRECATION")
             window.statusBarColor = if (darkTheme) {
                 BackgroundDark.toArgb()
             } else {

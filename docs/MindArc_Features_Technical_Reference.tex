@@ -1,0 +1,270 @@
+% MindArc — Technical Features Reference
+% LaTeX document describing all app features with code snippets
+
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{amsmath}
+
+\geometry{landscape, margin=2.5cm}
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{keyword}{RGB}{0,0,128}
+\definecolor{comment}{RGB}{34,139,34}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{codebg},
+    keywordstyle=\color{keyword}\bfseries,
+    commentstyle=\color{comment},
+    numbers=left,
+    numberstyle=\tiny,
+    breaklines=true,
+    frame=single,
+    tabsize=4,
+    showstringspaces=false
+}
+
+\title{\textbf{MindArc} \\ Technical Features Reference}
+\author{MindArc Android Application}
+\date{\today}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+This document describes the main features of the MindArc application in technical detail. MindArc is an Android app that helps users manage screen time by restricting selected applications until the user completes physical or cognitive activities (e.g., pushups, squats, reading, trace-to-earn). Each feature is explained with relevant architecture and code snippets of at least 5--6 lines from the codebase.
+\end{abstract}
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{App Restrictions and Blocking}
+%==============================================================================
+\subsection{Overview}
+The app allows users to select which applications should be \emph{restricted}. When a restricted app is opened, an \texttt{AccessibilityService} detects the foreground app and, if it is in the restricted list and no unlock session is active, launches a full-screen \texttt{BlockActivity} that prevents use until the user completes an activity (e.g., pushups or reading) to earn unlock time.
+
+\subsection{Data Model}
+Restricted apps are stored in Room with usage and limit fields. The entity is keyed by \texttt{packageName}.
+
+\begin{lstlisting}[caption={RestrictedApp entity (Room).}]
+@Entity(tableName = "restricted_apps")  // Room table name for persistence
+data class RestrictedApp(
+    @PrimaryKey                        // Unique key; used to identify app in DB
+    val packageName: String,           // Android package name (e.g. com.whatsapp)
+    val appName: String,               // Display name shown in UI
+    var isBlocked: Boolean = true,     // If true, app is restricted until unlock
+    var dailyLimitInMillis: Long = 0,   // Per-app daily cap; 0 = use common limit or block
+    var usageTodayInMillis: Long = 0,  // Foreground time today (from UsageStatsManager)
+    var extraTimePurchased: Long = 0,  // Bonus time earned (e.g. from activities)
+    var lastUsageTimestamp: Long = 0,  // Last time usage was updated
+    var warningSent: Boolean = false   // One-minute warning notification sent
+)
+\end{lstlisting}
+
+\subsection{Blocking Logic}
+The service compares total usage against a \emph{common daily limit} (all blocked apps combined) and per-app limits. If the common limit is set and exceeded, or the app is simply blocked with no active unlock session, the app is blocked.
+
+\begin{lstlisting}[caption={Deciding whether to block (AppBlockingService).}]
+// Read shared daily cap (0 = disabled) from SharedPreferences
+val commonLimit = repository.getCommonDailyLimitMillis()
+// Only count apps that user has marked as blocked
+val blockedApps = apps.filter { it.isBlocked }
+// Sum today's usage across all blocked apps for common-limit check
+val totalUsageAllBlocked = blockedApps.sumOf { it.usageTodayInMillis }
+val commonLimitExceeded = commonLimit > 0 && restrictedApp.isBlocked &&
+    totalUsageAllBlocked >= commonLimit
+
+// Priority: common limit > per-app limit > simple isBlocked flag
+val shouldBlock = when {
+    commonLimit > 0 && restrictedApp.isBlocked -> commonLimitExceeded
+    restrictedApp.dailyLimitInMillis > 0 -> perAppUsageExceeded
+    else -> restrictedApp.isBlocked
+}
+// Show BlockActivity only if not in an active unlock session
+if (shouldBlock && !isUnlocked) blockApp(packageName, isCountdown = false)
+\end{lstlisting}
+
+%==============================================================================
+\section{Screen Time Tracking}
+%==============================================================================
+\subsection{Overview}
+Screen time is obtained via \texttt{UsageStatsManager} with \texttt{INTERVAL\_DAILY}. The app shows total device screen time on the home screen and, when the user taps the Screen Time card, a dialog with \emph{social media} usage only (WhatsApp, Instagram, Facebook, etc.), plus a tier (Excellent, Good, Average, etc.) based on a configurable time slab.
+
+\subsection{Social Media Usage Tiers (Time Slab)}
+Tiers are based on total daily social media usage in hours: Excellent (0--1h), Good (1--2h), Average (2--3h), Below Average (3--4.5h), Bad (4.5--6h), Critical (6+h). The tier is computed from millis and returned as an enum with label and emoji.
+
+\begin{lstlisting}[caption={Social media usage tier from total millis (ScreenTimeManager).}]
+fun getSocialMediaUsageTier(totalMillis: Long): SocialMediaUsageTier {
+    // Convert daily usage to minutes for time-slab comparison
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(totalMillis)
+    return when {
+        minutes < 60 -> SocialMediaUsageTier.EXCELLENT       // 0 - 1 hr
+        minutes < 120 -> SocialMediaUsageTier.GOOD          // 1 - 2 hrs
+        minutes < 180 -> SocialMediaUsageTier.AVERAGE       // 2 - 3 hrs
+        minutes < 270 -> SocialMediaUsageTier.BELOW_AVERAGE // 3 - 4.5 hrs
+        minutes < 360 -> SocialMediaUsageTier.BAD           // 4.5 - 6 hrs
+        else -> SocialMediaUsageTier.CRITICAL                // 6+ hrs
+    }
+}
+\end{lstlisting}
+
+\subsection{Repository: Common Daily Limit}
+The common daily limit (shared by all selected/blocked apps) is stored in \texttt{SharedPreferences} and read by the blocking service. The repository exposes sync read and suspend write.
+
+\begin{lstlisting}[caption={Common daily limit storage (MindArcRepository).}]
+// Synchronous read; 0L means no common limit (use per-app or block only)
+fun getCommonDailyLimitMillis(): Long =
+    sharedPreferences.getLong(KEY_COMMON_DAILY_LIMIT_MILLIS, 0L)
+
+// Persist user choice; run on IO to avoid blocking UI
+suspend fun setCommonDailyLimitMillis(millis: Long) = withContext(ioDispatcher) {
+    sharedPreferences.edit().putLong(KEY_COMMON_DAILY_LIMIT_MILLIS, millis).apply()
+}
+\end{lstlisting}
+
+%==============================================================================
+\section{Unlock Sessions and Activity Completion}
+%==============================================================================
+\subsection{Overview}
+Completing an activity (e.g., Trace-to-Earn, Pong, Speed-Dial) inserts an \texttt{ActivityRecord} and creates an \texttt{UnlockSession} with a fixed end time. Until that time, restricted apps are not blocked. The ViewModel delegates to the repository for \texttt{insertActivity}, \texttt{updateProgressAfterActivity}, and \texttt{createUnlockSession}.
+
+\subsection{Trace-to-Earn Completion}
+Trace-to-Earn awards 5 minutes (excellent), 1 minute (average), or 0 minutes based on trace accuracy. The ViewModel creates the activity record and, if minutes $>$ 0, creates the unlock session.
+
+\begin{lstlisting}[caption={Completing Trace-to-Earn and creating unlock session (MindArcViewModel).}]
+suspend fun completeTraceToEarnActivity(unlockMinutes: Int): Long {
+    // Map reward minutes to points (5 min=5 pts, 1 min=1 pt, 0=0)
+    val points = when (unlockMinutes) { 5 -> 5; 1 -> 1; else -> 0 }
+    val activity = ActivityRecord(
+        activityType = ActivityType.TRACE_TO_EARN,
+        pointsEarned = points,
+        unlockDurationMinutes = unlockMinutes
+    )
+    val activityId = repository.insertActivity(activity)
+    repository.updateProgressAfterActivity(points)  // Update user total points/level
+    if (unlockMinutes > 0) {
+        val session = repository.createUnlockSession(activityId, unlockMinutes)
+        _activeSession.value = session   // UI observes this to show "Apps Unlocked"
+        repository.updateProgressAfterUnlock()
+    }
+    return activityId
+}
+\end{lstlisting}
+
+%==============================================================================
+\section{Pose-Based Exercise Detection}
+%==============================================================================
+\subsection{Overview}
+Pushups and squats are counted using ML Kit Pose Detection. For \textbf{pushups}, a 4-phase state machine (UP $\to$ GOING\_DOWN $\to$ AT\_BOTTOM $\to$ GOING\_UP $\to$ UP) is driven by elbow angle and optional 3-signal depth (shoulder drop, nose drop, elbow width). For \textbf{squats}, counting uses only vertical displacement of hip and head (no joint angles), with EMA smoothing, velocity thresholds, and a minimum hold time at bottom to avoid half-reps.
+
+\subsection{State Machine and Thresholds}
+The \texttt{PoseAnalyzer} holds phase state and uses hysteresis (different enter/exit angles) to avoid jitter. Squat depth is normalized by image height for scale invariance.
+
+\begin{lstlisting}[caption={PoseAnalyzer state and squat constants (PoseAnalyzer.kt).}]
+// Rep counted only after full cycle: UP -> GOING_DOWN -> AT_BOTTOM -> GOING_UP -> UP
+private enum class RepPhase { UP, GOING_DOWN, AT_BOTTOM, GOING_UP }
+
+private val PUSHUP_DOWN_ENTER = 100f   // Elbow angle: below = at bottom
+private val PUSHUP_UP_ENTER = 142f     // Elbow angle: above = at top (arms extended)
+
+private val SQUAT_EMA_ALPHA = 0.25f   // Smoothing factor for depth (noise reduction)
+private val SQUAT_BOTTOM_DEPTH_THRESHOLD = 0.22f  // Normalized depth to count as bottom
+private val SQUAT_MIN_BOTTOM_HOLD_MS = 200L       // Must stay at bottom 0.2s (anti-jitter)
+private val SQUAT_MIN_DEPTH_RANGE_FOR_REP = 0.12f // Min depth range to accept rep (reject half-reps)
+\end{lstlisting}
+
+%==============================================================================
+\section{Text-to-Speech Rep Counting}
+%==============================================================================
+\subsection{Overview}
+During pushup or squat activities, each new rep is announced aloud (e.g., ``One'', ``Two'') using Android \texttt{TextToSpeech}. The composable \texttt{RepCountTts} keeps a \texttt{prevCount}; when \texttt{currentCount} increases and the activity has started, it speaks the word for the new count with \texttt{QUEUE\_FLUSH} and disposes the TTS engine in \texttt{onDispose}.
+
+\begin{lstlisting}[caption={TTS rep announcer (CommonActivityComponents.kt).}]
+// Run when count or hasStarted changes; only speak on new rep
+LaunchedEffect(currentCount, hasStarted) {
+    if (!hasStarted) return@LaunchedEffect
+    if (currentCount == 0) { prevCount = 0; return@LaunchedEffect }
+    if (currentCount > prevCount) {
+        prevCount = currentCount
+        val word = numberToWord(currentCount)  // "One", "Two", ... "Twenty", then "21", "22"...
+        tts?.speak(word, TextToSpeech.QUEUE_FLUSH, null, "rep_$currentCount")  // Flush so latest is spoken
+    }
+}
+\end{lstlisting}
+
+%==============================================================================
+\section{Trace-to-Earn Challenge}
+%==============================================================================
+\subsection{Overview}
+The user traces a random outline (star, flower, heart, motorcycle, house) on a canvas within 30 seconds. Accuracy is the average distance from each drawn point to the nearest point on the reference path (in normalized coordinates, then scaled to pixels). Rewards: average distance $<$ 10px $\Rightarrow$ 5 minutes; $<$ 30px $\Rightarrow$ 1 minute; otherwise 0.
+
+\subsection{Accuracy and Reward}
+When the timer ends or the user taps Submit, normalized user points are compared to the outline points; the average distance in pixel space determines the reward tier.
+
+\begin{lstlisting}[caption={Trace-to-Earn: computing accuracy and reward (TraceToEarnScreen.kt).}]
+val normPoints = userPointsNormalized  // User path in [0,1] same as outline
+// Average distance from each drawn point to nearest point on reference path
+val avgNorm = if (normPoints.isEmpty()) Float.MAX_VALUE
+    else normPoints.map { distanceToOutline(it, outlinePoints) }.average().toFloat()
+avgDistance = avgNorm * canvasScale   // Convert to pixels for threshold comparison
+minutesEarned = when {
+    avgDistance < THRESHOLD_EXCELLENT_PX -> 5   // < 10 px = 5 min unlock
+    avgDistance < THRESHOLD_AVERAGE_PX -> 1      // < 30 px = 1 min
+    else -> 0
+}
+scope.launch { viewModel.completeTraceToEarnActivity(minutesEarned) }
+showResult = true   // Show result dialog with tier and minutes earned
+\end{lstlisting}
+
+\subsection{Distance to Outline}
+For each user-drawn point, the minimum Euclidean distance to any point on the reference path is computed. The outline is stored as a list of \texttt{Offset}s in normalized [0,1] space.
+
+\begin{lstlisting}[caption={Distance from point to outline (TraceOutline.kt).}]
+// Returns shortest distance from point to the reference path (for accuracy scoring)
+fun distanceToOutline(point: Offset, outlinePoints: List<Offset>): Float {
+    if (outlinePoints.isEmpty()) return Float.MAX_VALUE
+    var min = Float.MAX_VALUE
+    for (p in outlinePoints) {
+        val dx = point.x - p.x
+        val dy = point.y - p.y
+        val d = sqrt(dx * dx + dy * dy)   // Euclidean distance
+        if (d < min) min = d
+    }
+    return min
+}
+\end{lstlisting}
+
+%==============================================================================
+\section{Repository and Data Layer}
+%==============================================================================
+\subsection{Overview}
+\texttt{MindArcRepository} coordinates Room DAOs, \texttt{UsageStatsManager}, and \texttt{SharedPreferences}. All DB and system calls run on \texttt{Dispatchers.IO} via \texttt{withContext}. Installed-apps list is built from \texttt{PackageManager.getInstalledPackages} and usage from \texttt{queryUsageStats}; a map is used for O(1) usage lookup per package.
+
+\subsection{Usage Aggregation for Installed Apps}
+Usage stats are converted to a map by package name so each installed app gets its today usage in constant time instead of a linear search.
+
+\begin{lstlisting}[caption={Installed apps with O(1) usage lookup (MindArcRepository).}]
+val usageStats = usageStatsManager.queryUsageStats(
+    UsageStatsManager.INTERVAL_DAILY, startTime, endTime)
+// Map: packageName -> totalTimeInForeground for O(1) lookup per app
+val usageByPackage = usageStats?.associateBy(
+    { it.packageName }, { it.totalTimeInForeground }) ?: emptyMap()
+
+return@withContext installedApps.mapNotNull { packageInfo ->
+    packageInfo.applicationInfo?.takeIf { ... }?.let { appInfo ->
+        val usageTime = usageByPackage[appInfo.packageName] ?: 0L  // O(1) instead of find
+        RestrictedApp(..., usageTodayInMillis = usageTime)
+    }
+}
+\end{lstlisting}
+
+%==============================================================================
+\section{Summary}
+%==============================================================================
+MindArc combines accessibility-based app blocking, \texttt{UsageStatsManager} for screen time, Room for persistence, and Compose for UI. Key technical aspects include: (1) common and per-app daily limits with unlock sessions; (2) social media usage aggregation and time-slab tiers; (3) pose-based rep counting with state machines and displacement-based squat logic; (4) TTS rep feedback; (5) trace-to-earn with path-distance accuracy and reward tiers; (6) repository-side optimizations (maps, caching) for installed-apps and usage.
+
+\end{document}

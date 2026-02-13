@@ -4,9 +4,11 @@ import android.util.Size
 import androidx.lifecycle.ViewModel
 import com.example.mindarc.domain.PoseAnalyzer
 import com.google.mlkit.vision.pose.Pose
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import javax.inject.Inject
 
 data class SquatCounterState(
     val count: Int = 0,
@@ -18,7 +20,8 @@ data class SquatCounterState(
     val imageSize: Size = Size(0, 0)
 )
 
-class SquatCounterViewModel : ViewModel() {
+@HiltViewModel
+class SquatCounterViewModel @Inject constructor() : ViewModel() {
     private val _state = MutableStateFlow(SquatCounterState())
     val state: StateFlow<SquatCounterState> = _state.asStateFlow()
 

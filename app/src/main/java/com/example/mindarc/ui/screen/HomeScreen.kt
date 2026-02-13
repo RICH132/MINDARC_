@@ -16,6 +16,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import com.example.mindarc.domain.SocialMediaScreenTime
+import com.example.mindarc.domain.getSocialMediaUsageTier
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -27,7 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.mindarc.ui.navigation.Screen
 import com.example.mindarc.ui.viewmodel.MindArcViewModel
@@ -37,7 +39,7 @@ import com.example.mindarc.ui.components.StatCard
 @Composable
 fun HomeScreen(
     navController: NavController,
-    viewModel: MindArcViewModel = viewModel()
+    viewModel: MindArcViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val userProgress by viewModel.userProgress.collectAsState()
@@ -45,6 +47,8 @@ fun HomeScreen(
     val restrictedApps by viewModel.restrictedApps.collectAsState()
     val isInitialized by viewModel.isInitialized.collectAsState()
     val screenTime by viewModel.todayScreenTime.collectAsState()
+    var showSocialMediaDialog by remember { mutableStateOf(false) }
+    var socialMediaData by remember { mutableStateOf<SocialMediaScreenTime?>(null) }
 
     // Check for "Display over other apps" permission
     var hasOverlayPermission by remember { 
@@ -209,6 +213,8 @@ fun HomeScreen(
                         onClick = {
                             if (screenTime == "Need Permission") {
                                 context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                            } else {
+                                showSocialMediaDialog = true
                             }
                         },
                         gradientColors = listOf(
@@ -282,6 +288,131 @@ fun HomeScreen(
             }
         }
     }
+
+    // Social media screen time dialog (when Screen Time card is clicked and permission granted)
+    LaunchedEffect(showSocialMediaDialog) {
+        if (showSocialMediaDialog) {
+            socialMediaData = viewModel.getSocialMediaScreenTime()
+        }
+    }
+    if (showSocialMediaDialog) {
+        SocialMediaScreenTimeDialog(
+            data = socialMediaData,
+            onDismiss = {
+                showSocialMediaDialog = false
+                socialMediaData = null
+            },
+            formatTime = { millis ->
+                val hours = java.util.concurrent.TimeUnit.MILLISECONDS.toHours(millis)
+                val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(millis) % 60
+                when {
+                    hours > 0 -> "${hours}h ${minutes}m"
+                    minutes > 0 -> "${minutes}m"
+                    else -> "0m"
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun SocialMediaScreenTimeDialog(
+    data: SocialMediaScreenTime?,
+    onDismiss: () -> Unit,
+    formatTime: (Long) -> String
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Social media today",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            if (data == null) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else {
+                val tier = getSocialMediaUsageTier(data.totalMillis)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = tier.emoji,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                        Column {
+                            Text(
+                                text = tier.label,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Total: ${formatTime(data.totalMillis)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    if (data.appUsages.isEmpty()) {
+                        Text(
+                            text = "No social media apps with usage found on this device.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = "By app:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        data.appUsages.forEach { entry ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = entry.appName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = formatTime(entry.usageMillis),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done", color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    )
 }
 
 @Composable

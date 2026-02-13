@@ -7,10 +7,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.VideocamOff
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,7 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.example.mindarc.data.model.ActivityType
 import com.example.mindarc.data.processor.PoseDetectionProcessor
@@ -29,19 +31,21 @@ import com.example.mindarc.ui.components.CameraPreview
 import com.example.mindarc.ui.components.CompletionOverlay
 import com.example.mindarc.ui.components.PermissionRequestUI
 import com.example.mindarc.ui.components.PoseOverlay
+import com.example.mindarc.ui.components.RepCountTts
 import com.example.mindarc.ui.navigation.Screen
 import com.example.mindarc.ui.viewmodel.MindArcViewModel
 import com.example.mindarc.ui.viewmodel.SquatCounterViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun SquatsActivityScreen(
     navController: NavController,
-    mindArcViewModel: MindArcViewModel = viewModel(),
-    squatCounterViewModel: SquatCounterViewModel = viewModel()
+    mindArcViewModel: MindArcViewModel = hiltViewModel(),
+    squatCounterViewModel: SquatCounterViewModel = hiltViewModel()
 ) {
     val cameraPermissionState = rememberMultiplePermissionsState(
         permissions = listOf(android.Manifest.permission.CAMERA)
@@ -51,11 +55,34 @@ fun SquatsActivityScreen(
     var isCompleted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    // --- Start / Countdown state ---
+    var hasStarted by remember { mutableStateOf(false) }
+    var isCountingDown by remember { mutableStateOf(false) }
+    var countdownValue by remember { mutableStateOf(5) }
+
     val processor = remember {
         PoseDetectionProcessor(ActivityType.SQUATS) { metrics, pose, size ->
             if (metrics is PoseAnalyzer.SquatMetrics) {
                 squatCounterViewModel.updateMetrics(metrics, pose, size)
             }
+        }
+    }
+
+    // Countdown timer
+    LaunchedEffect(isCountingDown) {
+        if (isCountingDown) {
+            countdownValue = 5
+            for (i in 5 downTo 1) {
+                countdownValue = i
+                delay(1000L)
+            }
+            countdownValue = 0 // 0 = "GO!"
+            delay(600L)
+            // Reset reps so any pre-start movement doesn't count
+            processor.poseAnalyzer.resetReps()
+            squatCounterViewModel.resetCount()
+            isCountingDown = false
+            hasStarted = true
         }
     }
 
@@ -70,7 +97,7 @@ fun SquatsActivityScreen(
                 title = { Text("AI Squat Counter", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -83,12 +110,14 @@ fun SquatsActivityScreen(
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize()) {
             if (cameraPermissionState.allPermissionsGranted) {
+                // ---- Camera background (always running so user can position) ----
                 CameraPreview(
                     modifier = Modifier.fillMaxSize(),
                     processor = processor
                 )
 
-                if (squatState.imageSize.width > 0) {
+                // Pose skeleton only after activity has started
+                if (hasStarted && squatState.imageSize.width > 0) {
                     PoseOverlay(
                         modifier = Modifier.fillMaxSize(),
                         pose = squatState.currentPose,
@@ -100,141 +129,244 @@ fun SquatsActivityScreen(
                 }
 
                 SquatGuideOverlay()
-            } else {
-                PermissionRequestUI(onGrant = { cameraPermissionState.launchMultiplePermissionRequest() })
-            }
 
-            if (cameraPermissionState.allPermissionsGranted && !isCompleted) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    AnimatedVisibility(
-                        visible = squatState.formFeedback.isNotEmpty(),
-                        enter = fadeIn() + slideInVertically(),
-                        exit = fadeOut() + slideOutVertically()
+                // TTS: announce each rep ("One", "Two", ...) when count increases
+                RepCountTts(currentCount = squatState.count, hasStarted = hasStarted)
+
+                // ============================================================
+                // Phase 1 — NOT STARTED: show Start button
+                // ============================================================
+                if (!hasStarted && !isCountingDown && !isCompleted) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = when {
-                                squatState.formFeedback.contains("Good", true) -> Color(0xFF4CAF50).copy(alpha = 0.9f)
-                                !squatState.isGoodForm && squatState.isDetecting -> Color(0xFFF44336).copy(alpha = 0.9f)
-                                else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
-                            },
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = squatState.formFeedback.uppercase(),
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Color.White,
-                                fontWeight = FontWeight.Black
+                                text = "AI SQUAT COUNTER",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Position your full body in frame and tap Start",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                            Spacer(modifier = Modifier.height(32.dp))
+                            Button(
+                                onClick = { isCountingDown = true },
+                                modifier = Modifier
+                                    .height(64.dp)
+                                    .width(220.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(28.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Start", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                // ============================================================
+                // Phase 2 — COUNTDOWN: 5 → 4 → 3 → 2 → 1 → GO!
+                // ============================================================
+                if (isCountingDown) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.6f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "GET READY",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (countdownValue > 0) "$countdownValue" else "GO!",
+                                style = MaterialTheme.typography.displayLarge.copy(fontSize = 120.sp),
+                                fontWeight = FontWeight.Black,
+                                color = if (countdownValue > 0) Color.White else Color(0xFF4CAF50)
                             )
                         }
                     }
+                }
 
-                    Surface(
-                        modifier = Modifier.size(160.dp),
-                        shape = CircleShape,
-                        color = Color.Black.copy(alpha = 0.5f),
-                        border = androidx.compose.foundation.BorderStroke(
-                            4.dp,
-                            if (squatState.isGoodForm) MaterialTheme.colorScheme.primary else Color.Gray
-                        )
+                // ============================================================
+                // Phase 3 — ACTIVE: exercise UI
+                // ============================================================
+                if (hasStarted && !isCompleted) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        AnimatedVisibility(
+                            visible = squatState.formFeedback.isNotEmpty(),
+                            enter = fadeIn() + slideInVertically(),
+                            exit = fadeOut() + slideOutVertically()
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = when {
+                                    squatState.formFeedback.contains("Good", true) ->
+                                        Color(0xFF4CAF50).copy(alpha = 0.9f)
+                                    !squatState.isGoodForm && squatState.isDetecting ->
+                                        Color(0xFFF44336).copy(alpha = 0.9f)
+                                    else ->
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                                },
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            ) {
                                 Text(
-                                    text = "${squatState.count}",
-                                    style = MaterialTheme.typography.displayLarge,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = "REPS",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    fontWeight = FontWeight.Bold
+                                    text = squatState.formFeedback.uppercase(),
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Black
                                 )
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(28.dp),
-                        color = Color.Black.copy(alpha = 0.6f)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Surface(
+                            modifier = Modifier.size(160.dp),
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.5f),
+                            border = androidx.compose.foundation.BorderStroke(
+                                4.dp,
+                                if (squatState.isGoodForm) MaterialTheme.colorScheme.primary else Color.Gray
+                            )
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Box(contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("+$points", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
-                                    Text("POINTS", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
-                                }
-                                VerticalDivider(modifier = Modifier.height(32.dp), color = Color.White.copy(alpha = 0.2f))
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("$unlockDuration min", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
-                                    Text("UNLOCK", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                                    Text(
+                                        text = "${squatState.count}",
+                                        style = MaterialTheme.typography.displayLarge,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "REPS",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
+                        }
 
-                            Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.weight(1f))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(28.dp),
+                            color = Color.Black.copy(alpha = 0.6f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                IconButton(
-                                    onClick = {
-                                        processor.poseAnalyzer.resetReps()
-                                        squatCounterViewModel.resetCount()
-                                    },
-                                    modifier = Modifier
-                                        .size(56.dp)
-                                        .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Color.White)
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            "+$points",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            "POINTS",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                    VerticalDivider(
+                                        modifier = Modifier.height(32.dp),
+                                        color = Color.White.copy(alpha = 0.2f)
+                                    )
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            "$unlockDuration min",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            "UNLOCK",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White.copy(alpha = 0.6f)
+                                        )
+                                    }
                                 }
 
-                                Button(
-                                    onClick = {
-                                        if (squatState.count > 0) {
-                                            scope.launch {
-                                                mindArcViewModel.completeSquatsActivity(squatState.count)
-                                                isCompleted = true
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.weight(1f).height(56.dp),
-                                    shape = RoundedCornerShape(16.dp),
-                                    enabled = squatState.count > 0,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                                    )
+                                Spacer(modifier = Modifier.height(20.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Icon(Icons.Default.Check, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Finish Workout", fontWeight = FontWeight.Bold)
+                                    IconButton(
+                                        onClick = {
+                                            processor.poseAnalyzer.resetReps()
+                                            squatCounterViewModel.resetCount()
+                                        },
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Color.White)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            if (squatState.count > 0) {
+                                                scope.launch {
+                                                    mindArcViewModel.completeSquatsActivity(squatState.count)
+                                                    isCompleted = true
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(56.dp),
+                                        shape = RoundedCornerShape(16.dp),
+                                        enabled = squatState.count > 0,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                        )
+                                    ) {
+                                        Icon(Icons.Default.Check, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Finish Workout", fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
                     }
                 }
+            } else {
+                PermissionRequestUI(onGrant = { cameraPermissionState.launchMultiplePermissionRequest() })
             }
 
+            // ---- Completion overlay ----
             if (isCompleted) {
                 CompletionOverlay(squatState.count, points, unlockDuration) {
                     navController.navigate(Screen.Home.route) {

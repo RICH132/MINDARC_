@@ -54,13 +54,8 @@ class PoseDetectionProcessor(
                     }
                 }
                 .addOnFailureListener {
-                    // Send empty/error metrics based on activity type
-                    val errorMetrics = when (activityType) {
-                        ActivityType.PUSHUPS -> PoseAnalyzer.PushUpMetrics(null, 0, 0, "Detection failed", false, 0f)
-                        ActivityType.SQUATS -> PoseAnalyzer.SquatMetrics(null, 0, 0, "Detection failed", false, 0f)
-                        else -> Any()
-                    }
-                    onPoseDetected(errorMetrics, null, imageSize)
+                    // On failure, skip the callback entirely to avoid resetting
+                    // the rep count. The last valid state is preserved in the ViewModel.
                 }
                 .addOnCompleteListener {
                     imageProxy.close()

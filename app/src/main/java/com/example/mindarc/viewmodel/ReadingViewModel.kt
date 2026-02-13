@@ -1,7 +1,6 @@
 package com.example.mindarc.viewmodel
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.mindarc.data.model.ActivityRecord
 import com.example.mindarc.data.model.ActivityType
@@ -9,12 +8,15 @@ import com.example.mindarc.data.model.QuizQuestion
 import com.example.mindarc.data.model.ReadingContent
 import com.example.mindarc.data.model.ReadingReflection
 import com.example.mindarc.data.repository.MindArcRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class ReadingViewModel(private val repository: MindArcRepository) : ViewModel() {
+@HiltViewModel
+class ReadingViewModel @Inject constructor(private val repository: MindArcRepository) : ViewModel() {
 
     private val _readingContent = MutableStateFlow<ReadingContent?>(null)
     val readingContent: StateFlow<ReadingContent?> = _readingContent.asStateFlow()
@@ -77,12 +79,3 @@ class ReadingViewModel(private val repository: MindArcRepository) : ViewModel() 
     }
 }
 
-class ReadingViewModelFactory(private val repository: MindArcRepository) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(ReadingViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return ReadingViewModel(repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}

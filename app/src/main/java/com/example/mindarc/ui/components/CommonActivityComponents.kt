@@ -1,5 +1,6 @@
 package com.example.mindarc.ui.components
 
+import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -9,13 +10,88 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
+
+/**
+ * Announces each rep count via TTS when the count increases (e.g. "One", "Two", "Three").
+ * Call this from pushup or squat screens when the activity has started.
+ */
+@Composable
+fun RepCountTts(
+    currentCount: Int,
+    hasStarted: Boolean
+) {
+    val context = LocalContext.current
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var prevCount by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(context) {
+        var engineRef: TextToSpeech? = null
+        val engine = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                engineRef?.language = Locale.getDefault()
+                tts = engineRef
+            }
+        }
+        engineRef = engine
+        onDispose {
+            engine.shutdown()
+            tts = null
+        }
+    }
+
+    LaunchedEffect(currentCount, hasStarted) {
+        if (!hasStarted) return@LaunchedEffect
+        if (currentCount == 0) {
+            prevCount = 0
+            return@LaunchedEffect
+        }
+        if (currentCount > prevCount) {
+            prevCount = currentCount
+            val word = numberToWord(currentCount)
+            tts?.speak(word, TextToSpeech.QUEUE_FLUSH, null, "rep_$currentCount")
+        }
+    }
+}
+
+private fun numberToWord(n: Int): String = when (n) {
+    1 -> "One"
+    2 -> "Two"
+    3 -> "Three"
+    4 -> "Four"
+    5 -> "Five"
+    6 -> "Six"
+    7 -> "Seven"
+    8 -> "Eight"
+    9 -> "Nine"
+    10 -> "Ten"
+    11 -> "Eleven"
+    12 -> "Twelve"
+    13 -> "Thirteen"
+    14 -> "Fourteen"
+    15 -> "Fifteen"
+    16 -> "Sixteen"
+    17 -> "Seventeen"
+    18 -> "Eighteen"
+    19 -> "Nineteen"
+    20 -> "Twenty"
+    else -> n.toString()
+}
 
 @Composable
 fun CompletionOverlay(count: Int, points: Int, duration: Int, onHome: () -> Unit) {
